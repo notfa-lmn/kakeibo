@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>家計簿</title>
+  <style>
+    :root {
+      --primary: #007aff;
+      --danger: #ff3b30;
+      --warning: #ff9500;
+      --success: #34c759;
+      --bg: #f2f2f7;
+      --card: #ffffff;
+      --text: #1c1c1e;
+      --sub: #8e8e93;
+      --sep: #e5e5ea;
+      --fill: #f2f2f7;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      max-width: 430px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding-bottom: 90px;
+    }
+
+    /* ── HEADER ── */
+    .app-header {
+      background: rgba(255,255,255,0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 0.5px solid var(--sep);
+      position: sticky; top:0; z-index:100;
+      padding: 14px 16px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .app-header h1 { font-size: 18px; font-weight: 700; }
+
+    /* ── MONTH NAV ── */
+    .month-nav {
+      display: flex; align-items: center; justify-content: center;
+      padding: 10px 16px; gap: 20px;
+      background: var(--card);
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .month-nav-btn {
+      background: none; border: none;
+      font-size: 22px; color: var(--primary);
+      cursor: pointer; padding: 4px 12px; border-radius: 8px;
+    }
+    .month-nav-label { font-size: 16px; font-weight: 700; }
+
+    /* ── SCREENS ── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--card); border-radius: 12px;
+      margin: 12px 16px 0; padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .card-label { font-size: 12px; color: var(--sub); font-weight: 500; margin-bottom: 4px; }
+    .card-value { font-size: 26px; font-weight: 700; }
+
+    /* ── BANK CARD ── */
+    .bank-card {
+      background: linear-gradient(135deg, #1565c0, #0d47a1);
+      color: #fff; border-radius: 14px;
+      margin: 12px 16px 0; padding: 16px;
+      box-shadow: 0 4px 12px rgba(21,101,192,0.3);
+    }
+    .bank-card-label { font-size: 12px; opacity: 0.8; margin-bottom: 4px; }
+    .bank-card-value { font-size: 28px; font-weight: 700; }
+    .bank-card-detail { font-size: 11px; opacity: 0.7; margin-top: 6px; }
+    .credit-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.25);
+    }
+    .credit-label { font-size: 12px; opacity: 0.85; }
+    .credit-input {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 8px; color: #fff;
+      font-size: 15px; font-weight: 600;
+      padding: 6px 10px; text-align: right; width: 140px;
+      font-family: inherit;
+    }
+    .credit-input::placeholder { color: rgba(255,255,255,0.5); }
+
+    /* ── BUDGET GRID ── */
+    .section-title {
+      font-size: 13px; font-weight: 600; color: var(--sub);
+      padding: 14px 16px 6px;
+    }
+    .budget-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; padding: 0 16px;
+    }
+    .budget-cell {
+      background: var(--card); border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .bc-name { font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+    .bc-balance { font-size: 17px; font-weight: 700; }
+    .bc-balance.ok { color: var(--text); }
+    .bc-balance.warn { color: var(--warning); }
+    .bc-balance.bad { color: var(--danger); }
+    .bc-bar-wrap {
+      height: 3px; background: var(--bg);
+      border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    .bc-bar { height: 100%; border-radius: 2px; transition: width .3s; }
+    .bar-ok { background: var(--success); }
+    .bar-warn { background: var(--warning); }
+    .bar-bad { background: var(--danger); }
+    .bc-detail { font-size: 10px; color: var(--sub); margin-top: 3px; }
+
+    /* ── FORM ── */
+    .form-wrap { padding: 16px; }
+    .fg { margin-bottom: 14px; }
+    .fg label { display: block; font-size: 13px; color: var(--sub); font-weight: 500; margin-bottom: 6px; }
+    .fi, .fs {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid var(--sep); border-radius: 10px;
+      font-size: 16px; font-family: inherit;
+      background: var(--card); color: var(--text);
+      -webkit-appearance: none;
+    }
+    .fi:focus, .fs:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* satisfaction */
+    .sat-row { display: flex; gap: 6px; }
+    .sat-btn {
+      flex: 1; padding: 10px 2px;
+      border: 2px solid var(--sep); border-radius: 8px;
+      background: var(--card); font-size: 18px;
+      cursor: pointer; text-align: center;
+    }
+    .sat-btn.on { border-color: var(--primary); background: rgba(0,122,255,0.08); }
+
+    /* transfer display */
+    .transfer-box {
+      background: var(--fill); border-radius: 10px;
+      padding: 11px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .transfer-box-label { font-size: 13px; color: var(--sub); }
+    .transfer-box-value { font-size: 18px; font-weight: 700; color: var(--primary); }
+
+    /* next month toggle */
+    .nm-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0 10px; cursor: pointer;
+      border-top: 0.5px solid var(--sep); margin-top: 4px;
+    }
+    .nm-toggle-label { font-size: 14px; font-weight: 500; color: var(--sub); }
+    .nm-arrow { color: var(--sub); font-size: 16px; transition: transform .2s; }
+    .nm-arrow.open { transform: rotate(90deg); }
+    .nm-fields { display: none; }
+    .nm-fields.open { display: block; padding-top: 8px; }
+
+    /* buttons */
+    .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .btn-p { background: var(--primary); color: #fff; }
+    .btn-p:active { background: #005ecb; }
+    .btn-s { background: var(--fill); color: var(--text); margin-top: 8px; }
+    .btn-d { background: rgba(255,59,48,0.1); color: var(--danger); margin-top: 8px; }
+
+    /* ── LIST ── */
+    .list-wrap { padding: 0 16px 16px; }
+    .date-header {
+      font-size: 13px; font-weight: 600; color: var(--sub);
+      padding: 12px 4px 6px;
+    }
+    .expense-row {
+      background: var(--card); border-radius: 10px;
+      padding: 11px 13px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      transition: opacity .15s;
+    }
+    .expense-row:active { opacity: 0.7; }
+    .exp-sat { font-size: 18px; width: 26px; text-align: center; flex-shrink: 0; }
+    .exp-info { flex: 1; min-width: 0; }
+    .exp-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-meta { font-size: 11px; color: var(--sub); margin-top: 2px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .exp-amounts { text-align: right; flex-shrink: 0; }
+    .exp-amount { font-size: 14px; font-weight: 600; }
+    .exp-transfer { font-size: 11px; color: var(--sub); }
+
+    /* teki badges */
+    .tbadge { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 500; }
+    .t1 { background: #e3f2fd; color: #1565c0; }
+    .t2 { background: #e8f5e9; color: #2e7d32; }
+    .t3 { background: #fff3e0; color: #e65100; }
+    .t4 { background: #fce4ec; color: #b71c1c; }
+    .auto-badge { font-size: 10px; background: rgba(0,122,255,0.1); color: var(--primary); padding: 1px 5px; border-radius: 4px; }
+    .nm-badge { font-size: 10px; background: rgba(255,149,0,0.15); color: var(--warning); padding: 1px 5px; border-radius: 4px; }
+
+    .empty-state { text-align: center; padding: 48px 16px; color: var(--sub); }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* ── SETTINGS ── */
+    .settings-wrap { padding: 0 16px 16px; }
+    .set-card { background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+    .set-row {
+      display: flex; align-items: center;
+      padding: 12px 14px;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .set-row:last-child { border-bottom: none; }
+    .set-label { flex: 1; font-size: 15px; }
+    .set-input {
+      width: 120px; padding: 7px 10px;
+      border: 1px solid var(--sep); border-radius: 8px;
+      font-size: 15px; text-align: right; font-family: inherit;
+    }
+    .set-input:focus { outline: none; border-color: var(--primary); }
+    .set-note { font-size: 11px; color: var(--sub); padding: 6px 14px 10px; }
+
+    /* recurring list */
+    .rec-item {
+      background: var(--card); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .rec-info { flex: 1; }
+    .rec-name { font-size: 15px; font-weight: 500; }
+    .rec-meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+    .rec-right { text-align: right; }
+    .rec-amount { font-size: 15px; font-weight: 600; }
+    .rec-day { font-size: 12px; color: var(--sub); background: var(--fill); padding: 3px 8px; border-radius: 6px; margin-top: 4px; display: inline-block; }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      position: fixed; bottom: 0;
+      left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 430px;
+      background: rgba(255,255,255,0.93);
+      backdrop-filter: blur(20px);
+      border-top: 0.5px solid var(--sep);
+      display: flex; z-index: 200;
+      padding-bottom: env(safe-area-inset-bottom, 6px);
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; padding: 8px 0 4px;
+      border: none; background: none; cursor: pointer; font-family: inherit;
+    }
+    .nav-icon { font-size: 22px; line-height: 1; }
+    .nav-label { font-size: 10px; color: var(--sub); margin-top: 2px; }
+    .nav-btn.active .nav-label { color: var(--primary); }
+    .fab-wrap {
+      flex: 1; display: flex; align-items: flex-start;
+      justify-content: center; padding-top: 2px;
+    }
+    .fab {
+      width: 50px; height: 50px;
+      background: var(--primary); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 3px 12px rgba(0,122,255,0.4);
+      margin-top: -10px; font-family: inherit;
+    }
+    .fab:active { background: #005ecb; }
+
+    /* ── MODAL ── */
+    .overlay {
+      display: none; position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.45); z-index: 500;
+      align-items: flex-end; justify-content: center;
+    }
+    .overlay.open { display: flex; }
+    .sheet {
+      background: var(--bg); width: 100%; max-width: 430px;
+      border-radius: 16px 16px 0 0;
+      max-height: 92vh; overflow-y: auto;
+    }
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: var(--sep); border-radius: 2px;
+      margin: 8px auto;
+    }
+    .sheet-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 16px 12px;
+    }
+    .sheet-title { font-size: 17px; font-weight: 700; }
+    .sheet-close {
+      background: var(--fill); border: none; border-radius: 50%;
+      width: 28px; height: 28px; font-size: 14px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* CSV */
+    .drop-zone {
+      border: 2px dashed var(--sep); border-radius: 12px;
+      padding: 28px 16px; text-align: center; cursor: pointer;
+      transition: all .2s;
+    }
+    .drop-zone.over { border-color: var(--primary); background: rgba(0,122,255,0.04); }
+    .drop-icon { font-size: 36px; margin-bottom: 8px; }
+    .drop-text { font-size: 14px; color: var(--sub); }
+    .drop-sub { font-size: 12px; color: var(--sub); margin-top: 4px; }
+
+    .csv-item {
+      background: var(--card); border-radius: 10px;
+      padding: 10px 12px; margin-bottom: 6px;
+      border-left: 3px solid var(--sep);
+    }
+    .csv-item.ok { border-left-color: var(--success); }
+    .csv-item.ng { border-left-color: var(--danger); }
+    .csv-item-name { font-size: 13px; font-weight: 500; }
+    .csv-item-detail { font-size: 11px; color: var(--sub); margin-top: 3px; }
+    .csv-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; margin-right: 4px; }
+    .tag-ok { background: rgba(52,199,89,0.15); color: var(--success); }
+    .tag-ng { background: rgba(255,59,48,0.15); color: var(--danger); }
+
+    /* misc */
+    input[type=number] { -moz-appearance: textfield; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .spacer { height: 16px; }
+
+    /* ── RECEIPT SCANNER ── */
+    .receipt-btn {
+      width: 100%; padding: 12px;
+      background: var(--fill);
+      border: 1.5px dashed var(--sep);
+      border-radius: 10px; font-size: 14px;
+      cursor: pointer; font-family: inherit;
+      color: var(--sub);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all .15s;
+    }
+    .receipt-btn:active { opacity: 0.7; }
+    .receipt-btn.scanning { border-color: var(--primary); color: var(--primary); background: rgba(0,122,255,0.05); }
+    .receipt-preview-wrap {
+      display: none; margin-top: 8px;
+      border-radius: 10px; overflow: hidden;
+      position: relative; background: #000;
+    }
+    .receipt-preview-img {
+      width: 100%; max-height: 220px;
+      object-fit: contain; display: block; opacity: 0.85;
+    }
+    .ocr-overlay {
+      display: none; position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #fff;
+    }
+    .ocr-spinner {
+      width: 32px; height: 32px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ocr-progress { font-size: 13px; opacity: 0.9; }
+    .ocr-status-msg {
+      font-size: 12px; margin-top: 6px;
+      text-align: center; min-height: 18px;
+      padding: 0 2px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════ HEADER -->
+<header class="app-header">
+  <h1 id="hdr-title">サマリー</h1>
+</header>
+
+<!-- ═══════════════════════════════════ SUMMARY -->
+<div id="scr-summary" class="screen active">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="navMonth(-1)">‹</button>
+    <span class="month-nav-label" id="sum-month"></span>
+    <button class="month-nav-btn" onclick="navMonth(1)">›</button>
+  </div>
+
+  <!-- Bank balance -->
+  <div class="bank-card">
+    <div class="bank-card-label">楽天銀行残高（理論値）</div>
+    <div class="bank-card-value" id="bank-val">¥0</div>
+    <div class="bank-card-detail" id="bank-detail"></div>
+  </div>
+
+  <!-- Totals row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 16px 0;">
+    <div class="card" style="margin:0;">
+      <div class="card-label">今月の支出計</div>
+      <div class="card-value" id="total-val" style="font-size:20px;">¥0</div>
+    </div>
+    <div class="card" style="margin:0;">
+      <div class="card-label">クレジット支払計</div>
+      <div class="card-value" id="credit-total-val" style="font-size:20px;">¥0</div>
+    </div>
+  </div>
+
+  <!-- Budget -->
+  <div class="section-title">予算残高</div>
+  <div class="budget-grid" id="budget-grid"></div>
+  <div class="spacer"></div>
+</div>
+
+<!-- ═══════════════════════════════════ ADD / EDIT -->
+<div id="scr-add" class="screen">
+  <div class="form-wrap">
+    <!-- Date -->
+    <div class="fg">
+      <label>日付</label>
+      <input class="fi" type="date" id="f-date">
+    </div>
+    <!-- 費目 -->
+    <div class="fg">
+      <label>費目（内容）</label>
+      <input class="fi" type="text" id="f-name" placeholder="例：スーパー　食料品まとめ買い">
+    </div>
+    <!-- Receipt scanner -->
+    <div class="fg">
+      <label>レシートから金額を読み取る（任意）</label>
+      <button type="button" class="receipt-btn" id="receipt-btn" onclick="openReceiptScanner()">
+        📷 レシートを撮影 / 画像を選択
+      </button>
+      <input type="file" id="receipt-input" accept="image/*" capture="environment"
+             style="display:none;" onchange="processReceiptImage(event)">
+      <div class="receipt-preview-wrap" id="receipt-preview-wrap">
+        <img class="receipt-preview-img" id="receipt-preview-img" src="" alt="レシート">
+        <div class="ocr-overlay" id="ocr-overlay">
+          <div class="ocr-spinner"></div>
+          <div class="ocr-progress" id="ocr-progress-text">準備中...</div>
+        </div>
+      </div>
+      <div class="ocr-status-msg" id="ocr-status"></div>
+    </div>
+    <!-- Amount + Teki -->
+    <div class="form-row">
+      <div class="fg">
+        <label>支出額（円）</label>
+        <input class="fi" type="number" id="f-amount" placeholder="0" oninput="onAmountInput()">
+      </div>
+      <div class="fg">
+        <label>敵種別</label>
+        <select class="fs" id="f-teki">
+          <option value="敵１">敵１（固定月次）</option>
+          <option value="敵２" selected>敵２（変動月次）</option>
+          <option value="敵３">敵３（固定不定期）</option>
+          <option value="敵４">敵４（変動不定期）</option>
+        </select>
+      </div>
+    </div>
+    <!-- Payment type -->
+    <div class="fg">
+      <label>支払種別（予算財布）</label>
+      <select class="fs" id="f-pay">
+        <option value="">― 種別なし（敵１ / 銀行振込）</option>
+        <option value="特別費">特別費</option>
+        <option value="配当金">配当金</option>
+        <option value="敵３">敵３</option>
+        <option value="食料品">食料品</option>
+        <option value="お小遣い">お小遣い</option>
+        <option value="日用品">日用品</option>
+        <option value="投資待機資金">投資待機資金</option>
+      </select>
+    </div>
+    <!-- 支払元予算 (auto) + 振込金額 (manual) -->
+    <div class="form-row">
+      <div class="fg">
+        <label>支払元予算（自動計算）</label>
+        <div class="transfer-box">
+          <span class="transfer-box-label">500円切り上げ</span>
+          <span class="transfer-box-value" id="transfer-disp">¥0</span>
+        </div>
+      </div>
+      <div class="fg">
+        <label>振込金額（円）</label>
+        <input class="fi" type="number" id="f-transfer-amt" placeholder="0">
+      </div>
+    </div>
+    <!-- クレカ対象外フラグ -->
+    <div class="fg" style="display:flex;align-items:center;gap:10px;padding:4px 0 2px;">
+      <input type="checkbox" id="f-no-cc" style="width:18px;height:18px;cursor:pointer;accent-color:var(--primary);">
+      <label for="f-no-cc" style="font-size:14px;cursor:pointer;color:var(--text);">クレジットカード対象外（銀行引き落とし等）</label>
+    </div>
+    <!-- Satisfaction -->
+    <div class="fg">
+      <label>支出満足度</label>
+      <div class="sat-row" id="sat-row">
+        <button class="sat-btn" data-s="◎" onclick="selSat('◎')">◎</button>
+        <button class="sat-btn" data-s="○" onclick="selSat('○')">○</button>
+        <button class="sat-btn on" data-s="△" onclick="selSat('△')">△</button>
+        <button class="sat-btn" data-s="✕" onclick="selSat('✕')">✕</button>
+        <button class="sat-btn" data-s="★" onclick="selSat('★')">★</button>
+      </div>
+    </div>
+    <!-- Next month -->
+    <div class="nm-toggle" onclick="toggleNm()">
+      <span class="nm-toggle-label">次月振込予定（任意）</span>
+      <span class="nm-arrow" id="nm-arrow">›</span>
+    </div>
+    <div class="nm-fields" id="nm-fields">
+      <div class="form-row">
+        <div class="fg">
+          <label>次月振込種別</label>
+          <select class="fs" id="f-nm-type">
+            <option value="">なし</option>
+            <option value="特別費">特別費</option>
+            <option value="配当金">配当金</option>
+            <option value="敵３">敵３</option>
+            <option value="食料品">食料品</option>
+            <option value="お小遣い">お小遣い</option>
+            <option value="日用品">日用品</option>
+            <option value="投資待機資金">投資待機資金</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>次月振込金額</label>
+          <input class="fi" type="number" id="f-nm-amt" placeholder="0">
+        </div>
+      </div>
+    </div>
+    <!-- Buttons -->
+    <div style="margin-top:16px;">
+      <button class="btn btn-p" id="submit-btn" onclick="submitExpense()">支出を記録</button>
+      <button class="btn btn-s" id="cancel-btn" style="display:none" onclick="cancelEdit()">キャンセル</button>
+      <button class="btn btn-d" id="delete-btn" style="display:none" onclick="deleteExpense()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ LIST -->
+<div id="scr-list" class="screen">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="navMonth(-1)">‹</button>
+    <span class="month-nav-label" id="list-month"></span>
+    <button class="month-nav-btn" onclick="navMonth(1)">›</button>
+  </div>
+  <div style="padding: 10px 16px 0;">
+    <button class="btn btn-s" style="padding:10px;font-size:14px;" onclick="openCsvModal()">
+      📄 楽天カードCSVを照合
+    </button>
+  </div>
+  <div class="list-wrap" id="expense-list"></div>
+</div>
+
+<!-- ═══════════════════════════════════ SETTINGS -->
+<div id="scr-settings" class="screen">
+  <div class="settings-wrap">
+    <!-- Monthly budgets -->
+    <div class="section-title" style="padding-left:0;">月次予算（毎月の予算額）</div>
+    <div class="set-card" id="budget-settings"></div>
+
+    <!-- Month adjustments -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <span>今月の予算調整</span>
+      <span id="settings-month-label" style="font-weight:400; font-size:12px;"></span>
+    </div>
+    <div class="set-card">
+      <div id="adj-settings"></div>
+      <div class="set-note">※前月に次月分の予算を使った場合などの調整額（マイナス入力でOK）<br>※前月の「次月振込予定」は自動反映されます</div>
+    </div>
+
+    <!-- Recurring -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <span>定期支出（敵１）自動入力</span>
+      <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
+    </div>
+    <div id="rec-list"></div>
+
+    <!-- Data backup -->
+    <div class="section-title" style="padding-left:0;">データのバックアップ・復元</div>
+    <div class="set-card">
+      <div class="set-row" style="flex-direction:column; align-items:stretch; gap:8px; padding:14px;">
+        <div style="font-size:13px; color:var(--sub); margin-bottom:4px;">
+          仕様変更前や定期的にバックアップを取ることをおすすめします。
+        </div>
+        <button class="btn btn-s" style="padding:12px; font-size:14px;" onclick="exportData()">
+          📤 データをエクスポート（バックアップ）
+        </button>
+        <button class="btn btn-s" style="padding:12px; font-size:14px;" onclick="document.getElementById('import-file').click()">
+          📥 データをインポート（復元）
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importData(event)">
+        <div id="import-msg" style="font-size:12px; text-align:center; min-height:16px;"></div>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-summary" onclick="switchScreen('summary')">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">サマリー</span>
+  </button>
+  <button class="nav-btn" id="nav-list" onclick="switchScreen('list')">
+    <span class="nav-icon">📋</span>
+    <span class="nav-label">支出一覧</span>
+  </button>
+  <div class="fab-wrap">
+    <button class="fab" onclick="switchScreen('add')" id="nav-add" title="支出を追加">＋</button>
+  </div>
+  <button class="nav-btn" id="nav-settings" onclick="switchScreen('settings')">
+    <span class="nav-icon">⚙️</span>
+    <span class="nav-label">設定</span>
+  </button>
+  <button class="nav-btn" style="opacity:0;pointer-events:none;"></button>
+</nav>
+
+<!-- ═══════════════════════════════════ RECURRING MODAL -->
+<div class="overlay" id="rec-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="rec-modal-title">定期支出を追加</span>
+      <button class="sheet-close" onclick="closeRecModal()">✕</button>
+    </div>
+    <div class="form-wrap" style="padding-top:0;">
+      <div class="fg">
+        <label>費目</label>
+        <input class="fi" type="text" id="rec-name" placeholder="例：家賃">
+      </div>
+      <div class="form-row">
+        <div class="fg">
+          <label>金額（円）</label>
+          <input class="fi" type="number" id="rec-amount" placeholder="0">
+        </div>
+        <div class="fg">
+          <label>毎月何日</label>
+          <input class="fi" type="number" id="rec-day" min="1" max="31" placeholder="1">
+        </div>
+      </div>
+      <div class="fg">
+        <label>支払種別（予算財布）</label>
+        <select class="fs" id="rec-pay">
+          <option value="">― 種別なし（銀行振込）</option>
+          <option value="特別費">特別費</option>
+          <option value="配当金">配当金</option>
+          <option value="敵３">敵３</option>
+          <option value="食料品">食料品</option>
+          <option value="お小遣い">お小遣い</option>
+          <option value="日用品">日用品</option>
+          <option value="投資待機資金">投資待機資金</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>満足度</label>
+        <div class="sat-row" id="rec-sat-row">
+          <button class="sat-btn" data-s="◎" onclick="selRecSat('◎')">◎</button>
+          <button class="sat-btn on" data-s="○" onclick="selRecSat('○')">○</button>
+          <button class="sat-btn" data-s="△" onclick="selRecSat('△')">△</button>
+          <button class="sat-btn" data-s="✕" onclick="selRecSat('✕')">✕</button>
+          <button class="sat-btn" data-s="★" onclick="selRecSat('★')">★</button>
+        </div>
+      </div>
+      <button class="btn btn-p" onclick="saveRec()">保存する</button>
+      <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ CSV MODAL -->
+<div class="overlay" id="csv-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title">楽天カードCSV照合</span>
+      <button class="sheet-close" onclick="closeCsvModal()">✕</button>
+    </div>
+    <div style="padding: 0 16px 24px;">
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-file').click()">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">CSVファイルを選択 またはドロップ</div>
+        <div class="drop-sub">楽天カードの利用明細CSVファイル</div>
+      </div>
+      <input type="file" id="csv-file" accept=".csv" style="display:none;" onchange="handleCsv(event)">
+      <div id="csv-result" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════
+const CATS = ['特別費','配当金','敵３','食料品','お小遣い','日用品','投資待機資金'];
+const STORAGE_KEY = 'kakeibo_v2';
+
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let curMonth = todayMonthKey();
+let curScreen = 'summary';
+let editId = null;
+let selSatVal = '△';
+let selRecSatVal = '○';
+let editRecId = null;
+
+// ═══════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════
+function defaultData() {
+  return {
+    v: 2,
+    settings: {
+      budgets: { 特別費:0, 配当金:0, 敵３:0, 食料品:0, お小遣い:0, 日用品:0, 投資待機資金:0 },
+      recurring: []
+    },
+    months: {}
+  };
+}
+
+let D = (() => {
+  try { const s = localStorage.getItem(STORAGE_KEY); if(s) return JSON.parse(s); } catch(e){}
+  return defaultData();
+})();
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+}
+
+function mdata(key) {
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], recDone:false };
+  if (!D.months[key].adj) D.months[key].adj = {};
+  return D.months[key];
+}
+
+// ═══════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════
+function todayMonthKey() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+}
+function todayStr() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+function monthLabel(k) {
+  const [y,m] = k.split('-');
+  return `${y}年${parseInt(m)}月`;
+}
+function prevMk(k) {
+  const [y,m] = k.split('-').map(Number);
+  const d = new Date(y, m-2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function nextMk(k) {
+  const [y,m] = k.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function yen(n) { return '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
+function yenSigned(n) { return (n < 0 ? '-¥' : '¥') + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
+function roundUp500(n) { return n <= 0 ? 0 : Math.ceil(n / 500) * 500; }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ═══════════════════════════════════════════════════
+//  CALCULATIONS
+// ═══════════════════════════════════════════════════
+function budgetBalance(mk, cat) {
+  const md = mdata(mk);
+  const base = D.settings.budgets[cat] || 0;
+  const manAdj = (md.adj[cat] || 0);
+  // auto: deduct previous month's nextMonth amounts for this category
+  const prevKey = prevMk(mk);
+  const prevMd = D.months[prevKey];
+  let autoAdj = 0;
+  if (prevMd && prevMd.expenses) {
+    autoAdj = prevMd.expenses
+      .filter(e => e.nmType === cat)
+      .reduce((s,e) => s + (e.nmAmt||0), 0);
+  }
+  const total = base + manAdj - autoAdj;
+  const spent = (md.expenses||[])
+    .filter(e => e.payType === cat)
+    .reduce((s,e) => s + (e.amount||0), 0);
+  return total - spent;
+}
+
+function bankBalance(mk) {
+  const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
+  const transferSum = (mdata(mk).expenses||[]).reduce((s,e) => s + (e.transferAmt||0), 0);
+  return budgetSum + transferSum;
+}
+
+function totalExpenses(mk) {
+  return (mdata(mk).expenses||[]).reduce((s,e) => s + (e.amount||0), 0);
+}
+
+function creditTotal(mk) {
+  return (mdata(mk).expenses||[])
+    .filter(e => !e.noCc)
+    .reduce((s,e) => s + (e.amount||0), 0);
+}
+
+// ═══════════════════════════════════════════════════
+//  RECURRING AUTO-GENERATE
+// ═══════════════════════════════════════════════════
+function generateRecurring(mk) {
+  const md = mdata(mk);
+  if (md.recDone) return;
+  const [yr, mo] = mk.split('-').map(Number);
+  const recs = D.settings.recurring || [];
+  recs.filter(r => r.active !== false).forEach(r => {
+    if (md.expenses.some(e => e.recId === r.id)) return;
+    const maxDay = new Date(yr, mo, 0).getDate();
+    const day = Math.min(r.day||1, maxDay);
+    const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const amt = r.amount||0;
+    md.expenses.push({
+      id: uid(), recId: r.id,
+      date: dateStr, sat: r.sat||'○',
+      name: r.name, amount: amt,
+      payType: r.payType||'',
+      teki: '敵１',
+      budgetAlloc: roundUp500(amt),
+      transferAmt: 0,
+      noCc: false,
+      nmType: null, nmAmt: null,
+      auto: true
+    });
+  });
+  md.recDone = true;
+  save();
+}
+
+// ═══════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════
+function navMonth(dir) {
+  curMonth = dir < 0 ? prevMk(curMonth) : nextMk(curMonth);
+  generateRecurring(curMonth);
+  renderScreen();
+}
+
+function switchScreen(name) {
+  curScreen = name;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('scr-' + name).classList.add('active');
+  ['summary','list','settings'].forEach(n => {
+    const el = document.getElementById('nav-' + n);
+    if (el) el.classList.toggle('active', n === name);
+  });
+  const titles = { summary:'サマリー', add:'支出を入力', list:'支出一覧', settings:'設定' };
+  document.getElementById('hdr-title').textContent = titles[name] || '';
+  if (name === 'add') {
+    if (!editId) resetForm();
+    document.getElementById('hdr-title').textContent = editId ? '支出を編集' : '支出を入力';
+  } else {
+    editId = null;
+    renderScreen();
+  }
+}
+
+function renderScreen() {
+  if (curScreen === 'summary') renderSummary();
+  else if (curScreen === 'list') renderList();
+  else if (curScreen === 'settings') renderSettings();
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER — SUMMARY
+// ═══════════════════════════════════════════════════
+function renderSummary() {
+  document.getElementById('sum-month').textContent = monthLabel(curMonth);
+  refreshBankDisplay();
+  document.getElementById('total-val').textContent = yen(totalExpenses(curMonth));
+  document.getElementById('credit-total-val').textContent = yen(creditTotal(curMonth));
+  const grid = document.getElementById('budget-grid');
+  grid.innerHTML = '';
+  CATS.forEach(cat => {
+    const base = D.settings.budgets[cat]||0;
+    const bal = budgetBalance(curMonth, cat);
+    const pct = base > 0 ? Math.max(0, Math.min(100, bal/base*100)) : 0;
+    const cls = bal < 0 ? 'bad' : bal < base*0.2 ? 'warn' : 'ok';
+    const bcls = bal < 0 ? 'bar-bad' : bal < base*0.2 ? 'bar-warn' : 'bar-ok';
+    const cell = document.createElement('div');
+    cell.className = 'budget-cell';
+    cell.innerHTML = `
+      <div class="bc-name">${esc(cat)}</div>
+      <div class="bc-balance ${cls}">${bal<0?'-':''}${yen(bal)}</div>
+      <div class="bc-bar-wrap"><div class="bc-bar ${bcls}" style="width:${pct}%"></div></div>
+      <div class="bc-detail">予算: ${yen(base)}</div>`;
+    grid.appendChild(cell);
+  });
+}
+
+function refreshBankDisplay() {
+  const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
+  const transferSum = (mdata(curMonth).expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
+  const total = budgetSum + transferSum;
+  document.getElementById('bank-val').textContent = yenSigned(total);
+  document.getElementById('bank-detail').textContent =
+    `予算残高合計: ${yenSigned(budgetSum)}　振込金額合計: ${yen(transferSum)}`;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER — LIST
+// ═══════════════════════════════════════════════════
+function renderList() {
+  document.getElementById('list-month').textContent = monthLabel(curMonth);
+  const md = mdata(curMonth);
+  const exps = [...(md.expenses||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  const el = document.getElementById('expense-list');
+  if (!exps.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>支出データがありません</div></div>`;
+    return;
+  }
+  const byDate = {};
+  exps.forEach(e => { (byDate[e.date] = byDate[e.date]||[]).push(e); });
+  let html = '';
+  Object.keys(byDate).sort().forEach(date => {
+    const [,, day] = date.split('-');
+    const wd = ['日','月','火','水','木','金','土'][new Date(date).getDay()];
+    html += `<div class="date-header">${parseInt(day)}日（${wd}）</div>`;
+    byDate[date].forEach(e => {
+      const tc = `t${(e.teki||'敵２').replace('敵','')}`;
+      const autoBadge = e.auto ? `<span class="auto-badge">自動</span>` : '';
+      const noCcBadge = e.noCc ? `<span class="tbadge" style="background:#f0f0f5;color:#636366;">🏦銀行引落</span>` : '';
+      const payLabel = e.payType ? `💰 ${e.payType}` : '💳 銀行振込';
+      const nmBadge = e.nmType ? `<span class="nm-badge">次月:${e.nmType} ${yen(e.nmAmt||0)}</span>` : '';
+      const budgetAllocVal = e.budgetAlloc || e.transfer || 0;
+      const transferLine = e.transferAmt
+        ? `支払元: ${yen(budgetAllocVal)}　振込: ${yen(e.transferAmt)}`
+        : `支払元: ${yen(budgetAllocVal)}`;
+      html += `
+        <div class="expense-row" onclick="openEdit('${e.id}')">
+          <div class="exp-sat">${e.sat||'○'}</div>
+          <div class="exp-info">
+            <div class="exp-name">${autoBadge} ${esc(e.name)}</div>
+            <div class="exp-meta">
+              ${payLabel}
+              <span class="tbadge ${tc}">${e.teki||'敵２'}</span>
+              ${noCcBadge}
+              ${nmBadge}
+            </div>
+          </div>
+          <div class="exp-amounts">
+            <div class="exp-amount">${yen(e.amount)}</div>
+            <div class="exp-transfer">${transferLine}</div>
+          </div>
+        </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER — SETTINGS
+// ═══════════════════════════════════════════════════
+function renderSettings() {
+  document.getElementById('settings-month-label').textContent = monthLabel(curMonth);
+  // budgets
+  document.getElementById('budget-settings').innerHTML = CATS.map(cat => `
+    <div class="set-row">
+      <span class="set-label">${esc(cat)}</span>
+      <input class="set-input" type="number" value="${D.settings.budgets[cat]||0}"
+             onchange="saveBudget('${cat}',this.value)">
+    </div>`).join('');
+  // adjustments
+  const md = mdata(curMonth);
+  document.getElementById('adj-settings').innerHTML = CATS.map(cat => `
+    <div class="set-row">
+      <span class="set-label">${esc(cat)}</span>
+      <input class="set-input" type="number" value="${(md.adj||{})[cat]||0}"
+             onchange="saveAdj('${cat}',this.value)">
+    </div>`).join('');
+  // recurring
+  renderRecList();
+}
+
+function saveBudget(cat, val) {
+  D.settings.budgets[cat] = parseFloat(val)||0;
+  save();
+}
+function saveAdj(cat, val) {
+  const md = mdata(curMonth);
+  if (!md.adj) md.adj = {};
+  md.adj[cat] = parseFloat(val)||0;
+  save();
+}
+
+function renderRecList() {
+  const recs = D.settings.recurring||[];
+  const el = document.getElementById('rec-list');
+  if (!recs.length) {
+    el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">定期支出が登録されていません</div>`;
+    return;
+  }
+  el.innerHTML = recs.map(r => `
+    <div class="rec-item" onclick="openRecModal('${r.id}')">
+      <div class="rec-info">
+        <div class="rec-name">${esc(r.name)}</div>
+        <div class="rec-meta">${r.payType||'銀行振込'}</div>
+      </div>
+      <div class="rec-right">
+        <div class="rec-amount">${yen(r.amount)}</div>
+        <span class="rec-day">毎月${r.day}日</span>
+      </div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  FORM — ADD/EDIT
+// ═══════════════════════════════════════════════════
+function resetForm() {
+  document.getElementById('f-date').value = todayStr();
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-amount').value = '';
+  document.getElementById('f-teki').value = '敵２';
+  document.getElementById('f-pay').value = '';
+  document.getElementById('transfer-disp').textContent = '¥0';
+  document.getElementById('f-transfer-amt').value = '';
+  document.getElementById('f-no-cc').checked = false;
+  document.getElementById('receipt-preview-wrap').style.display = 'none';
+  document.getElementById('receipt-preview-img').src = '';
+  document.getElementById('ocr-status').textContent = '';
+  document.getElementById('receipt-btn').classList.remove('scanning');
+  document.getElementById('f-nm-type').value = '';
+  document.getElementById('f-nm-amt').value = '';
+  document.getElementById('nm-fields').classList.remove('open');
+  document.getElementById('nm-arrow').classList.remove('open');
+  selSatVal = '△';
+  updateSatUI();
+  document.getElementById('submit-btn').textContent = '支出を記録';
+  document.getElementById('cancel-btn').style.display = 'none';
+  document.getElementById('delete-btn').style.display = 'none';
+}
+
+function openEdit(id) {
+  const md = mdata(curMonth);
+  const e = md.expenses.find(x => x.id === id);
+  if (!e) return;
+  editId = id;
+  document.getElementById('f-date').value = e.date;
+  document.getElementById('f-name').value = e.name;
+  document.getElementById('f-amount').value = e.amount;
+  document.getElementById('f-teki').value = e.teki||'敵２';
+  document.getElementById('f-pay').value = e.payType||'';
+  document.getElementById('transfer-disp').textContent = yen(e.budgetAlloc || e.transfer || 0);
+  document.getElementById('f-transfer-amt').value = e.transferAmt||'';
+  document.getElementById('f-no-cc').checked = e.noCc||false;
+  document.getElementById('f-nm-type').value = e.nmType||'';
+  document.getElementById('f-nm-amt').value = e.nmAmt||'';
+  selSatVal = e.sat||'△';
+  updateSatUI();
+  const hasNm = !!e.nmType;
+  document.getElementById('nm-fields').classList.toggle('open', hasNm);
+  document.getElementById('nm-arrow').classList.toggle('open', hasNm);
+  document.getElementById('submit-btn').textContent = '更新する';
+  document.getElementById('cancel-btn').style.display = '';
+  document.getElementById('delete-btn').style.display = '';
+  document.getElementById('hdr-title').textContent = '支出を編集';
+  switchScreen('add');
+}
+
+function onAmountInput() {
+  const v = parseFloat(document.getElementById('f-amount').value)||0;
+  document.getElementById('transfer-disp').textContent = yen(roundUp500(v));
+}
+
+function selSat(s) { selSatVal = s; updateSatUI(); }
+function updateSatUI() {
+  document.querySelectorAll('#sat-row .sat-btn').forEach(b => b.classList.toggle('on', b.dataset.s === selSatVal));
+}
+
+function toggleNm() {
+  document.getElementById('nm-fields').classList.toggle('open');
+  document.getElementById('nm-arrow').classList.toggle('open');
+}
+
+function submitExpense() {
+  const date = document.getElementById('f-date').value;
+  const name = document.getElementById('f-name').value.trim();
+  const amount = parseFloat(document.getElementById('f-amount').value)||0;
+  if (!date || !name || amount <= 0) { alert('日付・費目・支出額を入力してください'); return; }
+  const mk = date.slice(0,7);
+  const md = mdata(mk);
+  const nmType = document.getElementById('f-nm-type').value||null;
+  const nmAmt = nmType ? (parseFloat(document.getElementById('f-nm-amt').value)||null) : null;
+  const expObj = {
+    date, name, amount,
+    teki: document.getElementById('f-teki').value,
+    payType: document.getElementById('f-pay').value,
+    sat: selSatVal,
+    budgetAlloc: roundUp500(amount),
+    transferAmt: parseFloat(document.getElementById('f-transfer-amt').value)||0,
+    noCc: document.getElementById('f-no-cc').checked,
+    nmType, nmAmt,
+    auto: false
+  };
+  if (editId) {
+    const idx = md.expenses.findIndex(e => e.id === editId);
+    if (idx !== -1) md.expenses[idx] = { ...md.expenses[idx], ...expObj };
+  } else {
+    md.expenses.push({ id: uid(), ...expObj });
+  }
+  save();
+  editId = null;
+  curMonth = mk;
+  switchScreen('list');
+}
+
+function cancelEdit() { editId = null; switchScreen('list'); }
+
+function deleteExpense() {
+  if (!editId) return;
+  if (!confirm('この支出を削除しますか？')) return;
+  const md = mdata(curMonth);
+  md.expenses = md.expenses.filter(e => e.id !== editId);
+  save();
+  editId = null;
+  switchScreen('list');
+}
+
+// ═══════════════════════════════════════════════════
+//  RECEIPT OCR
+// ═══════════════════════════════════════════════════
+function openReceiptScanner() {
+  document.getElementById('receipt-input').click();
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function processReceiptImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // プレビュー表示
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('receipt-preview-img').src = e.target.result;
+    document.getElementById('receipt-preview-wrap').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+
+  // ローディング表示
+  const overlay = document.getElementById('ocr-overlay');
+  const statusEl = document.getElementById('ocr-status');
+  const btn = document.getElementById('receipt-btn');
+  overlay.style.display = 'flex';
+  statusEl.textContent = '';
+  btn.classList.add('scanning');
+
+  try {
+    // Tesseract.js を遅延ロード（初回のみダウンロード）
+    if (!window.Tesseract) {
+      document.getElementById('ocr-progress-text').textContent = 'ライブラリ読み込み中...';
+      await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    }
+    document.getElementById('ocr-progress-text').textContent = '文字認識中... 0%';
+
+    const result = await Tesseract.recognize(file, 'jpn', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          document.getElementById('ocr-progress-text').textContent = `文字認識中... ${pct}%`;
+        }
+      }
+    });
+
+    overlay.style.display = 'none';
+    btn.classList.remove('scanning');
+
+    const amount = extractReceiptTotal(result.data.text);
+    if (amount && amount > 0) {
+      document.getElementById('f-amount').value = amount;
+      onAmountInput();
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✅ 合計金額 ¥${amount.toLocaleString('ja-JP')} を反映しました`;
+    } else {
+      statusEl.style.color = 'var(--warning)';
+      statusEl.textContent = '⚠️ 合計金額が見つかりませんでした。手動で入力してください';
+    }
+  } catch(err) {
+    overlay.style.display = 'none';
+    btn.classList.remove('scanning');
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = '❌ 読み取りに失敗しました。手動で入力してください';
+    console.error('OCR error:', err);
+  }
+  event.target.value = '';
+}
+
+function extractReceiptTotal(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+  // 合計金額を示すキーワード（優先順）
+  const totalPatterns = [
+    /合\s*計/,
+    /お\s*支\s*払/,
+    /税\s*込\s*合\s*計/,
+    /税\s*込/,
+    /お\s*買\s*上/,
+    /請\s*求/,
+    /total/i,
+  ];
+
+  for (const pattern of totalPatterns) {
+    for (let i = 0; i < lines.length; i++) {
+      if (!pattern.test(lines[i])) continue;
+      // 該当行と次の2行から金額を探す
+      for (let j = i; j <= Math.min(i + 2, lines.length - 1); j++) {
+        const amount = pickNumber(lines[j]);
+        if (amount && amount >= 100 && amount <= 9999999) return amount;
+      }
+    }
+  }
+
+  // フォールバック：テキスト中の全数値を拾い、最後の妥当な値を返す
+  const candidates = [];
+  lines.forEach(line => {
+    const n = pickNumber(line);
+    if (n && n >= 100 && n <= 9999999) candidates.push(n);
+  });
+  return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+}
+
+function pickNumber(str) {
+  // ¥マーク除去後、数字+カンマのパターンを全抽出して最大値を返す
+  const cleaned = str.replace(/[¥￥]/g, '');
+  const matches = cleaned.match(/\d[\d,，]*/g);
+  if (!matches) return null;
+  const nums = matches
+    .map(m => parseInt(m.replace(/[,，]/g, '')))
+    .filter(n => !isNaN(n) && n > 0);
+  return nums.length > 0 ? Math.max(...nums) : null;
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT / IMPORT
+// ═══════════════════════════════════════════════════
+function exportData() {
+  try {
+    const json = JSON.stringify(D, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kakeibo_backup_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('エクスポートに失敗しました: ' + e.message);
+  }
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const msg = document.getElementById('import-msg');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // バリデーション
+      if (!parsed.settings || !parsed.months) {
+        throw new Error('ファイルの形式が正しくありません');
+      }
+      if (!confirm(`バックアップファイル「${file.name}」を読み込みます。\n現在のデータはすべて上書きされます。\n\nよろしいですか？`)) {
+        event.target.value = '';
+        return;
+      }
+      D = parsed;
+      save();
+      generateRecurring(curMonth);
+      renderSettings();
+      msg.style.color = 'var(--success)';
+      msg.textContent = '✅ インポートが完了しました';
+      setTimeout(() => { msg.textContent = ''; }, 4000);
+    } catch(err) {
+      msg.style.color = 'var(--danger)';
+      msg.textContent = '❌ 読み込みに失敗しました：' + err.message;
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════════
+//  RECURRING MODAL
+// ═══════════════════════════════════════════════════
+function openRecModal(id) {
+  editRecId = id;
+  const modal = document.getElementById('rec-modal');
+  if (id) {
+    const r = (D.settings.recurring||[]).find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('rec-modal-title').textContent = '定期支出を編集';
+    document.getElementById('rec-name').value = r.name;
+    document.getElementById('rec-amount').value = r.amount;
+    document.getElementById('rec-day').value = r.day;
+    document.getElementById('rec-pay').value = r.payType||'';
+    selRecSatVal = r.sat||'○';
+    document.getElementById('rec-del-btn').style.display = '';
+  } else {
+    document.getElementById('rec-modal-title').textContent = '定期支出を追加';
+    document.getElementById('rec-name').value = '';
+    document.getElementById('rec-amount').value = '';
+    document.getElementById('rec-day').value = '';
+    document.getElementById('rec-pay').value = '';
+    selRecSatVal = '○';
+    document.getElementById('rec-del-btn').style.display = 'none';
+  }
+  updateRecSatUI();
+  modal.classList.add('open');
+}
+function closeRecModal() { document.getElementById('rec-modal').classList.remove('open'); }
+
+function selRecSat(s) { selRecSatVal = s; updateRecSatUI(); }
+function updateRecSatUI() {
+  document.querySelectorAll('#rec-sat-row .sat-btn').forEach(b => b.classList.toggle('on', b.dataset.s === selRecSatVal));
+}
+
+function saveRec() {
+  const name = document.getElementById('rec-name').value.trim();
+  const amount = parseFloat(document.getElementById('rec-amount').value)||0;
+  const day = parseInt(document.getElementById('rec-day').value)||0;
+  if (!name || amount <= 0 || day < 1 || day > 31) { alert('費目・金額・日付を正しく入力してください'); return; }
+  const rec = {
+    name, amount, day,
+    payType: document.getElementById('rec-pay').value,
+    sat: selRecSatVal,
+    active: true
+  };
+  if (!D.settings.recurring) D.settings.recurring = [];
+  if (editRecId) {
+    const idx = D.settings.recurring.findIndex(r => r.id === editRecId);
+    if (idx !== -1) D.settings.recurring[idx] = { ...D.settings.recurring[idx], ...rec };
+  } else {
+    D.settings.recurring.push({ id: uid(), ...rec });
+  }
+  save();
+  closeRecModal();
+  renderRecList();
+}
+
+function deleteRec() {
+  if (!editRecId || !confirm('この定期支出を削除しますか？')) return;
+  D.settings.recurring = (D.settings.recurring||[]).filter(r => r.id !== editRecId);
+  save();
+  closeRecModal();
+  renderRecList();
+}
+
+// ═══════════════════════════════════════════════════
+//  CSV MODAL
+// ═══════════════════════════════════════════════════
+function openCsvModal() {
+  document.getElementById('csv-result').innerHTML = '';
+  document.getElementById('csv-file').value = '';
+  document.getElementById('csv-modal').classList.add('open');
+}
+function closeCsvModal() { document.getElementById('csv-modal').classList.remove('open'); }
+
+function handleCsv(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    let text;
+    try {
+      text = new TextDecoder('shift-jis').decode(e.target.result);
+    } catch(_) {
+      text = new TextDecoder('utf-8').decode(e.target.result);
+    }
+    processCsv(text);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processCsv(raw) {
+  const lines = raw.split(/\r?\n/).filter(l => l.trim());
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('利用日') && (lines[i].includes('利用金額') || lines[i].includes('金額'))) {
+      headerIdx = i; break;
+    }
+  }
+  if (headerIdx < 0) {
+    document.getElementById('csv-result').innerHTML = '<div style="color:var(--danger);font-size:14px;text-align:center;padding:16px;">CSVのヘッダーが見つかりませんでした。楽天カードの明細CSVを使用してください。</div>';
+    return;
+  }
+  // Determine column indices from header
+  const headers = parseCsvLine(lines[headerIdx]);
+  const colDate = headers.findIndex(h => h.includes('利用日'));
+  const colName = headers.findIndex(h => h.includes('利用店名') || h.includes('商品名'));
+  const colAmt  = headers.findIndex(h => h.includes('利用金額'));
+  if (colDate < 0 || colAmt < 0) {
+    document.getElementById('csv-result').innerHTML = '<div style="color:var(--danger);font-size:14px;text-align:center;padding:16px;">列が見つかりませんでした。CSVの形式を確認してください。</div>';
+    return;
+  }
+
+  const csvItems = [];
+  for (let i = headerIdx+1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    if (cols.length <= Math.max(colDate, colAmt)) continue;
+    const rawDate = cols[colDate].trim();
+    const rawName = colName >= 0 ? cols[colName].trim() : '不明';
+    const rawAmt  = cols[colAmt].trim().replace(/,/g,'');
+    const amount  = parseInt(rawAmt);
+    if (!rawDate || isNaN(amount) || amount <= 0) continue;
+    const dateStr = rawDate.replace(/\//g,'-');
+    csvItems.push({ date: dateStr, name: rawName, amount });
+  }
+
+  if (!csvItems.length) {
+    document.getElementById('csv-result').innerHTML = '<div style="color:var(--sub);font-size:14px;text-align:center;padding:16px;">CSVにデータがありませんでした。</div>';
+    return;
+  }
+
+  const md = mdata(curMonth);
+  const exps = md.expenses||[];
+  let matchN = 0, missN = 0;
+  let itemsHtml = '';
+
+  csvItems.forEach(ci => {
+    const found = exps.find(e => e.amount === ci.amount && e.date === ci.date);
+    if (found) {
+      matchN++;
+      itemsHtml += `
+        <div class="csv-item ok">
+          <div class="csv-item-name"><span class="csv-tag tag-ok">一致</span>${esc(ci.name)}</div>
+          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}</div>
+        </div>`;
+    } else {
+      missN++;
+      itemsHtml += `
+        <div class="csv-item ng">
+          <div class="csv-item-name"><span class="csv-tag tag-ng">未入力</span>${esc(ci.name)}</div>
+          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}</div>
+        </div>`;
+    }
+  });
+
+  const summaryHtml = `
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <div style="flex:1;background:rgba(52,199,89,0.1);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:var(--success);">${matchN}</div>
+        <div style="font-size:11px;color:var(--sub);">一致</div>
+      </div>
+      <div style="flex:1;background:rgba(255,59,48,0.1);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:var(--danger);">${missN}</div>
+        <div style="font-size:11px;color:var(--sub);">未入力</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${csvItems.length}件 / 手入力: ${exps.length}件</div>`;
+
+  document.getElementById('csv-result').innerHTML = summaryHtml + itemsHtml;
+}
+
+function parseCsvLine(line) {
+  const res = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') { inQ = !inQ; }
+    else if (line[i] === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
+    else { cur += line[i]; }
+  }
+  res.push(cur.trim());
+  return res;
+}
+
+// ═══════════════════════════════════════════════════
+//  DRAG AND DROP — CSV
+// ═══════════════════════════════════════════════════
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    let text;
+    try { text = new TextDecoder('shift-jis').decode(ev.target.result); }
+    catch(_) { text = new TextDecoder('utf-8').decode(ev.target.result); }
+    processCsv(text);
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ═══════════════════════════════════════════════════
+//  OVERLAY CLOSE ON BG CLICK
+// ═══════════════════════════════════════════════════
+document.getElementById('rec-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('rec-modal')) closeRecModal();
+});
+document.getElementById('csv-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('csv-modal')) closeCsvModal();
+});
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+generateRecurring(curMonth);
+renderSummary();
+</script>
+</body>
+</html>
