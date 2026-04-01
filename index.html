@@ -334,6 +334,26 @@
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
     .spacer { height: 16px; }
 
+    /* ── AUTH ── */
+    .auth-btn {
+      background: none; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--fill); font-family: inherit;
+      padding: 0;
+    }
+    .auth-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; line-height: 1;
+    }
+    .sync-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--success); position: absolute;
+      bottom: 2px; right: 2px; border: 1.5px solid #fff;
+    }
+
     /* ── RECEIPT SCANNER ── */
     .receipt-btn {
       width: 100%; padding: 12px;
@@ -386,6 +406,11 @@
 <!-- ═══════════════════════════════════ HEADER -->
 <header class="app-header">
   <h1 id="hdr-title">サマリー</h1>
+  <div style="position:relative;">
+    <button class="auth-btn" id="auth-btn" title="Googleでログイン" onclick="signInGoogle()">
+      <span style="font-size:11px;color:var(--sub);">ログイン</span>
+    </button>
+  </div>
 </header>
 
 <!-- ═══════════════════════════════════ SUMMARY -->
@@ -699,7 +724,102 @@
   </div>
 </div>
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <script>
+// ═══════════════════════════════════════════════════
+//  FIREBASE
+// ═══════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyCcjhi3UmiuL0EtLrXiwv75QR_fkexEbM4",
+  authDomain: "kakeibo-de618.firebaseapp.com",
+  projectId: "kakeibo-de618",
+  storageBucket: "kakeibo-de618.firebasestorage.app",
+  messagingSenderId: "880403671376",
+  appId: "1:880403671376:web:ad4b8a47fe42c707962455"
+};
+
+let fbAuth = null, fbDb = null, currentUser = null;
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+
+  fbAuth.onAuthStateChanged(async (user) => {
+    currentUser = user;
+    updateAuthUI();
+    if (user) {
+      await loadFromCloud();
+    }
+  });
+} catch(e) {
+  console.warn('Firebase init failed:', e);
+}
+
+async function saveToCloud() {
+  if (!currentUser || !fbDb) return;
+  try {
+    await fbDb.collection('users').doc(currentUser.uid).set(JSON.parse(JSON.stringify(D)));
+  } catch(e) {
+    console.warn('Cloud save failed:', e);
+  }
+}
+
+async function loadFromCloud() {
+  if (!currentUser || !fbDb) return;
+  try {
+    const doc = await fbDb.collection('users').doc(currentUser.uid).get();
+    if (doc.exists) {
+      const cloud = doc.data();
+      if (cloud && cloud.settings && cloud.months) {
+        D = cloud;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+        generateRecurring(curMonth);
+        renderScreen();
+      }
+    } else {
+      // 初回クラウド利用時：ローカルデータをアップロード
+      await saveToCloud();
+    }
+  } catch(e) {
+    console.warn('Cloud load failed:', e);
+  }
+}
+
+function signInGoogle() {
+  if (!fbAuth) { alert('Firebase の初期化に失敗しています'); return; }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider).catch(e => {
+    alert('ログインに失敗しました: ' + e.message);
+  });
+}
+
+function signOutUser() {
+  if (!fbAuth) return;
+  if (!confirm('ログアウトしますか？\n（ローカルデータは保持されます）')) return;
+  fbAuth.signOut();
+}
+
+function updateAuthUI() {
+  const btn = document.getElementById('auth-btn');
+  if (!btn) return;
+  if (currentUser) {
+    const name = currentUser.displayName || currentUser.email || 'ユーザー';
+    const initial = name.charAt(0).toUpperCase();
+    btn.innerHTML = `<div style="position:relative;"><span class="auth-avatar">${initial}</span><span class="sync-dot"></span></div>`;
+    btn.title = `${name}（タップでログアウト）`;
+    btn.onclick = signOutUser;
+  } else {
+    btn.innerHTML = `<span style="font-size:11px;color:var(--sub);">ログイン</span>`;
+    btn.title = 'Googleでログイン';
+    btn.onclick = signInGoogle;
+  }
+}
+
 // ═══════════════════════════════════════════════════
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
@@ -737,6 +857,7 @@ let D = (() => {
 
 function save() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+  saveToCloud();
 }
 
 function mdata(key) {
