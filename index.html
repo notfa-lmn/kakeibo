@@ -334,6 +334,17 @@
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
     .spacer { height: 16px; }
 
+    /* ── REC APPLY BUTTON ── */
+    .rec-apply-btn {
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      padding: 4px 10px; border-radius: 6px; border: none; cursor: pointer;
+      background: var(--primary); color: #fff;
+    }
+    .rec-apply-btn.applied {
+      background: var(--fill); color: var(--sub);
+    }
+    .rec-apply-btn:active { opacity: 0.75; }
+
     /* ── CATEGORY MANAGER ── */
     .cat-teki-block { background: var(--card); border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
     .cat-teki-hdr {
@@ -382,6 +393,16 @@
     }
     .fab-menu-btn:last-child { border-bottom: none; }
     .fab-menu-btn:active { background: var(--fill); }
+
+    /* ── RECEIPT LOADING ── */
+    .receipt-loading {
+      display: none; position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.72); z-index: 999;
+      flex-direction: column; align-items: center; justify-content: center;
+      color: #fff; text-align: center; padding: 24px;
+    }
+    .receipt-loading.active { display: flex; }
 
     /* ── INCOME LIST ── */
     .income-row {
@@ -750,7 +771,8 @@
   <div class="fab-wrap" style="position:relative;">
     <button class="fab" onclick="toggleFabMenu()" id="nav-add" title="追加">＋</button>
     <div class="fab-menu" id="fab-menu">
-      <button class="fab-menu-btn" onclick="closeFabMenu();switchScreen('add')">💸 支出を追加</button>
+      <button class="fab-menu-btn" onclick="closeFabMenu();openFabReceipt()">📷 レシートを撮影</button>
+      <button class="fab-menu-btn" onclick="closeFabMenu();switchScreen('add')">💸 支出を手入力</button>
       <button class="fab-menu-btn" onclick="closeFabMenu();openIncomeModal()">💰 収入を追加</button>
     </div>
   </div>
@@ -820,6 +842,16 @@
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════ RECEIPT LOADING OVERLAY -->
+<div class="receipt-loading" id="receipt-loading">
+  <div class="ocr-spinner"></div>
+  <div style="font-size:16px;font-weight:600;margin-top:14px;">レシートを読み取り中...</div>
+  <div id="receipt-loading-pct" style="font-size:13px;opacity:0.8;margin-top:6px;"></div>
+</div>
+<!-- hidden file input for FAB receipt scan -->
+<input type="file" id="fab-receipt-input" accept="image/*" capture="environment"
+       style="display:none;" onchange="handleFabReceipt(event)">
 
 <!-- ═══════════════════════════════════ INCOME MODAL -->
 <div class="overlay" id="income-modal">
@@ -1693,17 +1725,25 @@ function renderRecList() {
     el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">定期支出が登録されていません</div>`;
     return;
   }
-  el.innerHTML = recs.map(r => `
+  el.innerHTML = recs.map(r => {
+    const md = mdata(curMonth);
+    const already = (md.expenses||[]).some(e => e.recId === r.id);
+    return `
     <div class="rec-item" onclick="openRecModal('${r.id}')">
       <div class="rec-info">
         <div class="rec-name">${esc(r.name)}</div>
         <div class="rec-meta">${r.category ? `<span class="tbadge t1">${esc(r.category)}</span> ` : ''}${r.payType||'銀行振込'}</div>
       </div>
-      <div class="rec-right">
+      <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
         <div class="rec-amount">${yen(r.amount)}</div>
         <span class="rec-day">毎月${r.day}日</span>
+        <button class="rec-apply-btn ${already?'applied':''}"
+          onclick="event.stopPropagation();applyRecurring('${r.id}')">
+          ${already ? '✓ 反映済' : '＋ 反映'}
+        </button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════
@@ -1830,6 +1870,121 @@ function deleteExpense() {
   save();
   editId = null;
   switchScreen('list');
+}
+
+// ═══════════════════════════════════════════════════
+//  FAB RECEIPT SCAN
+// ═══════════════════════════════════════════════════
+function openFabReceipt() {
+  document.getElementById('fab-receipt-input').click();
+}
+
+async function handleFabReceipt(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const loading = document.getElementById('receipt-loading');
+  const pctEl  = document.getElementById('receipt-loading-pct');
+  loading.classList.add('active');
+  pctEl.textContent = '準備中...';
+  try {
+    if (!window.Tesseract) {
+      pctEl.textContent = 'ライブラリ読み込み中...';
+      await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    }
+    pctEl.textContent = '文字認識中... 0%';
+    const result = await Tesseract.recognize(file, 'jpn', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          pctEl.textContent = `文字認識中... ${Math.round(m.progress*100)}%`;
+        }
+      }
+    });
+    loading.classList.remove('active');
+    const text     = result.data.text;
+    const amount   = extractReceiptTotal(text);
+    const inferred = inferFromReceipt(text);
+    // switchScreen('add') が内部で resetForm() を呼ぶので先に遷移
+    switchScreen('add');
+    // フォームを推察値で上書き
+    if (amount && amount > 0) {
+      document.getElementById('f-amount').value = amount;
+      onAmountInput();
+    }
+    if (inferred.name) document.getElementById('f-name').value = inferred.name;
+    document.getElementById('f-teki').value = inferred.teki || '敵２';
+    onTekiChange();
+    if (inferred.category) {
+      document.getElementById('f-category').value = inferred.category;
+      onCategoryChange();
+      if (inferred.subcategory) {
+        document.getElementById('f-subcategory').value = inferred.subcategory;
+      }
+    }
+    // レシートプレビューを表示
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('receipt-preview-img').src = e.target.result;
+      document.getElementById('receipt-preview-wrap').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    // ステータスメッセージ
+    const st = document.getElementById('ocr-status');
+    if (amount && amount > 0) {
+      st.style.color = 'var(--success)';
+      st.textContent = `✅ 合計 ¥${amount.toLocaleString('ja-JP')} を読み取りました。内容を確認してください`;
+    } else {
+      st.style.color = 'var(--warning)';
+      st.textContent = '⚠️ 合計金額が読み取れませんでした。手動で入力してください';
+    }
+  } catch(err) {
+    loading.classList.remove('active');
+    console.error('OCR error:', err);
+    switchScreen('add');
+    document.getElementById('ocr-status').textContent = '❌ 読み取りに失敗しました。手動で入力してください';
+  }
+  event.target.value = '';
+}
+
+function inferFromReceipt(text) {
+  const lower = text.toLowerCase();
+  const lines  = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+  // 店名推察：先頭付近で数字比率の低い行を探す
+  let storeName = '';
+  for (let i = 0; i < Math.min(8, lines.length); i++) {
+    const line = lines[i];
+    if (/^[\d\s\/:年月日時分秒.\-()（）]+$/.test(line)) continue;
+    const digitRatio = (line.match(/\d/g)||[]).length / line.length;
+    if (digitRatio > 0.45) continue;
+    if (line.length < 2) continue;
+    storeName = line.replace(/[　 ]+/g, ' ').trim();
+    break;
+  }
+  // カテゴリ・サブカテゴリ推察テーブル（優先順）
+  const catMap = [
+    { cat:'食費', sub:'外食',      kws:['マクドナルド','mcdonald','モスバーガー','mos','すき家','吉野家','松屋','ラーメン','寿司','焼肉','ガスト','デニーズ','サイゼ','餃子','天丼','居酒屋','定食','うどん','そば','ピザ','バーガー','burger','restaurant','dining'] },
+    { cat:'食費', sub:'カフェ',    kws:['スタバ','starbucks','ドトール','タリーズ','コメダ','ベローチェ','珈琲','コーヒー','cafe','coffee'] },
+    { cat:'食費', sub:'食料品',    kws:['スーパー','イオン','ライフ','マルエツ','オーケー','業務スーパー','コープ','サミット','ヨーカドー','西友','食品','food','グルメ','食材','青果'] },
+    { cat:'食費', sub:'その他食費',kws:['ファミリーマート','ローソン','セブンイレブン','ミニストップ','デイリー','コンビニ'] },
+    { cat:'日用品', sub:'病院',    kws:['病院','クリニック','医院','薬局','調剤','診療','歯科','眼科','皮膚科','内科','外科'] },
+    { cat:'日用品', sub:'美容院',  kws:['カット','サロン','美容院','美容室','ヘアカラー','パーマ','ネイル','nail'] },
+    { cat:'日用品', sub:'サウナ',  kws:['サウナ','温浴','銭湯','スパ','温泉','浴場'] },
+    { cat:'日用品', sub:'ジム',    kws:['スポーツジム','フィットネス','gym','fitness','ジム'] },
+    { cat:'日用品', sub:'カフェ',  kws:[] },
+    { cat:'日用品', sub:'日用品',  kws:['ドラッグ','マツキヨ','マツモトキヨシ','ツルハ','ウェルシア','サンドラッグ','ニトリ','カインズ','コーナン','ホームセンター','無印','百均','100円','daiso','ダイソー'] },
+    { cat:'趣味・娯楽', sub:'その他', kws:['ゲーム','映画','cinema','書店','本屋','cd','dvd','カラオケ','ボウリング','アミューズ'] },
+    { cat:'交通費', sub:'その他',  kws:['タクシー','taxi','ガソリン','エネオス','出光','コスモ','シェル','elf','駐車','パーキング','高速'] },
+    { cat:'交際費', sub:'交際費',  kws:['花束','フラワー','ギフト','gift','プレゼント','贈'] },
+  ];
+  let inferredCat = '';
+  let inferredSub = '';
+  for (const { cat, sub, kws } of catMap) {
+    if (kws.length > 0 && kws.some(kw => lower.includes(kw.toLowerCase()))) {
+      inferredCat = cat;
+      inferredSub = sub;
+      break;
+    }
+  }
+  return { name: storeName, teki: '敵２', category: inferredCat, subcategory: inferredSub };
 }
 
 // ═══════════════════════════════════════════════════
@@ -2092,6 +2247,42 @@ function deleteRec() {
   save();
   closeRecModal();
   renderRecList();
+}
+
+function applyRecurring(recId) {
+  const r = (D.settings.recurring||[]).find(x => x.id === recId);
+  if (!r) return;
+  const [yr, mo] = curMonth.split('-').map(Number);
+  const maxDay = new Date(yr, mo, 0).getDate();
+  const day = Math.min(r.day||1, maxDay);
+  const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const amt = r.amount||0;
+  const md = mdata(curMonth);
+  const existing = (md.expenses||[]).find(e => e.recId === recId);
+  const expObj = {
+    recId, date: dateStr, sat: r.sat||'○',
+    name: r.name, amount: amt,
+    teki: '敵１',
+    category: r.category||'',
+    subcategory: '',
+    payType: r.payType||'',
+    budgetAlloc: roundUp500(amt),
+    transferAmt: 0,
+    noCc: false,
+    nmType: null, nmAmt: null,
+    auto: false
+  };
+  if (existing) {
+    // 上書き
+    const idx = md.expenses.indexOf(existing);
+    md.expenses[idx] = { ...existing, ...expObj };
+  } else {
+    // 新規
+    md.expenses.push({ id: uid(), ...expObj });
+  }
+  save();
+  renderRecList();
+  renderScreen();
 }
 
 // ═══════════════════════════════════════════════════
