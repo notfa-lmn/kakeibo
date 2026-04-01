@@ -1301,22 +1301,12 @@ function budgetBalance(mk, cat) {
   const base = D.settings.budgets[cat] || 0;
   const manAdj = (md.adj[cat] || 0);
   const prevKey = prevMk(mk);
-  const prevMd = D.months[prevKey];
-  let autoAdj = 0;
-  if (prevMd && prevMd.expenses) {
-    autoAdj = prevMd.expenses
-      .filter(e => e.nmType === cat)
-      .reduce((s,e) => s + (e.nmAmt||0), 0);
-  }
-  let total = base + manAdj - autoAdj;
+  let total = base + manAdj;
   // 積立予算：前月残高を繰り越す（前月データが存在する場合のみ）
   if (CARRYOVER_CATS.has(cat) && D.months[prevKey]) {
     total += budgetBalance(prevKey, cat);
   }
-  const spent = (md.expenses||[])
-    .filter(e => e.payType === cat)
-    .reduce((s,e) => s + (e.budgetAlloc != null ? e.budgetAlloc : (e.amount||0)), 0);
-  return total - spent;
+  return total;
 }
 
 function bankBalance(mk) {
@@ -2593,8 +2583,20 @@ function importData(event) {
 function populateRecCategory(selectedVal) {
   const sel = document.getElementById('rec-category');
   sel.innerHTML = '<option value="">選択（任意）</option>';
-  getECItems('敵１').forEach(item => {
-    sel.innerHTML += `<option value="${esc(item)}"${selectedVal===item?' selected':''}>${esc(item)}</option>`;
+  const groups = ['敵１','税・社会保障','投資','貯蓄'];
+  groups.forEach(grp => {
+    const items = getECItems(grp);
+    if (!items.length) return;
+    const og = document.createElement('optgroup');
+    og.label = grp;
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item;
+      if (item === selectedVal) opt.selected = true;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
   });
 }
 
