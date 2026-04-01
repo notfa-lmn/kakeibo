@@ -204,6 +204,9 @@
     .t2 { background: rgba(48,209,88,0.2); color: #34c759; }
     .t3 { background: rgba(255,159,10,0.2); color: #ff9f0a; }
     .t4 { background: rgba(255,69,58,0.2); color: #ff6b6b; }
+    .t5 { background: rgba(191,90,242,0.2); color: #bf5af2; }
+    .t6 { background: rgba(50,173,230,0.2); color: #32ade6; }
+    .t7 { background: rgba(94,92,230,0.2); color: #7d7aff; }
     .auto-badge { font-size: 10px; background: rgba(10,132,255,0.2); color: var(--primary); padding: 1px 5px; border-radius: 4px; }
     .nm-badge { font-size: 10px; background: rgba(255,149,0,0.15); color: var(--warning); padding: 1px 5px; border-radius: 4px; }
 
@@ -412,6 +415,30 @@
       background: var(--fill); color: var(--sub);
     }
     .rec-apply-btn:active { opacity: 0.75; }
+    .drag-handle {
+      font-size: 18px; color: var(--sep); cursor: grab;
+      padding: 4px 6px 4px 0; touch-action: none; user-select: none;
+      line-height: 1; flex-shrink: 0;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .rec-item.rec-dragging { opacity: 0.25; }
+    .rec-list-wrap {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.3s ease;
+    }
+    .rec-list-wrap.open {
+      max-height: 3000px;
+    }
+    .rec-toggle-btn {
+      background: none; border: none; color: var(--primary);
+      font-size: 13px; font-weight: 600; cursor: pointer; padding: 0;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .rec-toggle-arrow {
+      display: inline-block; transition: transform 0.25s ease; font-size: 10px;
+    }
+    .rec-toggle-arrow.open { transform: rotate(180deg); }
 
     /* ── CATEGORY MANAGER ── */
     .cat-teki-block { background: var(--card); border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
@@ -660,6 +687,9 @@
           <option value="敵２" selected>敵２（変動月次）</option>
           <option value="敵３">敵３（固定不定期）</option>
           <option value="敵４">敵４（変動不定期）</option>
+          <option value="税・社会保障">税・社会保障</option>
+          <option value="投資">投資</option>
+          <option value="貯蓄">貯蓄</option>
         </select>
       </div>
     </div>
@@ -805,10 +835,15 @@
 
     <!-- Recurring -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <span>定期支出（敵１）自動入力</span>
+      <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
+        <span id="rec-toggle-label">定期支出（敵１）自動入力</span>
+        <span class="rec-toggle-arrow open" id="rec-toggle-arrow">▼</span>
+      </button>
       <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
-    <div id="rec-list"></div>
+    <div class="rec-list-wrap" id="rec-list-wrap">
+      <div id="rec-list"></div>
+    </div>
 
     <!-- Category management -->
     <div class="section-title" style="padding-left:0;">支出カテゴリの管理</div>
@@ -918,6 +953,10 @@
           <button class="sat-btn" data-s="★" onclick="selRecSat('★')">★</button>
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 2px;cursor:pointer;">
+        <input type="checkbox" id="rec-no-cc" style="width:18px;height:18px;accent-color:var(--primary);">
+        <span style="font-size:14px;color:var(--text);">クレジットカード対象外（銀行引落・現金）</span>
+      </label>
       <button class="btn btn-p" onclick="saveRec()">保存する</button>
       <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
     </div>
@@ -1120,7 +1159,10 @@ const DEFAULT_EXPENSE_CATS = {
     '交通費':     ['その他']
   },
   '敵３': ['1password','マネーフォワード確定申告','スマクリ','賃貸更新料','賃貸保証会社更新料','Microsoft','美容皮膚科','脱毛','Amex年会費','JCB年会費','楽天カード年会費','その他'],
-  '敵４': ['PC','家具・家電','結婚式','プレゼント','お金の勉強フェス','旅行','洋服','洋服（浪費）','ディズニー','その他']
+  '敵４': ['PC','家具・家電','結婚式','プレゼント','お金の勉強フェス','旅行','洋服','洋服（浪費）','ディズニー','その他'],
+  '税・社会保障': ['小規模企業共済','所得税（SAPコンサル）','住民税（SAPコンサル）','消費税（SAPコンサル）','源泉所得税（ライブ配信）','消費税（ライブ配信）','ふるさと納税','社会保険','年金追納','その他'],
+  '投資':       ['NISA（積立）','NISA（米国高配当）','日本高配当株','iDeco','その他'],
+  '貯蓄':       ['貯蓄','その他']
 };
 
 // D.settings.expenseCats を参照するアクセサ
@@ -1159,6 +1201,8 @@ let editId = null;
 let selSatVal = '△';
 let selRecSatVal = '○';
 let editRecId = null;
+let recListOpen = localStorage.getItem('recListOpen') !== 'false';
+let recDrag = null;
 
 // ═══════════════════════════════════════════════════
 //  DATA
@@ -1179,6 +1223,16 @@ function initExpenseCats() {
   if (!D.settings.expenseCats) {
     D.settings.expenseCats = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
     save();
+  } else {
+    // 新カテゴリが未存在なら追加マージ
+    let changed = false;
+    Object.keys(DEFAULT_EXPENSE_CATS).forEach(k => {
+      if (!D.settings.expenseCats[k]) {
+        D.settings.expenseCats[k] = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS[k]));
+        changed = true;
+      }
+    });
+    if (changed) save();
   }
 }
 
@@ -1307,7 +1361,7 @@ function generateRecurring(mk) {
       subcategory: '',
       budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
       transferAmt: 0,
-      noCc: false,
+      noCc: !!r.noCc,
       nmType: null, nmAmt: null,
       auto: true
     });
@@ -1319,7 +1373,16 @@ function generateRecurring(mk) {
 // ═══════════════════════════════════════════════════
 //  CATEGORY MANAGER
 // ═══════════════════════════════════════════════════
-const TEKI_LABELS = { '敵１':'敵１（固定月次）','敵２':'敵２（変動月次）','敵３':'敵３（固定不定期）','敵４':'敵４（変動不定期）' };
+const TEKI_LABELS = {
+  '敵１':'敵１（固定月次）','敵２':'敵２（変動月次）',
+  '敵３':'敵３（固定不定期）','敵４':'敵４（変動不定期）',
+  '税・社会保障':'税・社会保障','投資':'投資','貯蓄':'貯蓄'
+};
+const TEKI_CSS = {
+  '敵１':'t1','敵２':'t2','敵３':'t3','敵４':'t4',
+  '税・社会保障':'t5','投資':'t6','貯蓄':'t7'
+};
+function tekiClass(teki) { return TEKI_CSS[teki] || 't2'; }
 
 function renderCatMgr() {
   initExpenseCats();
@@ -1328,7 +1391,7 @@ function renderCatMgr() {
   if (!el) return;
   const tekis = ['敵１','敵２','敵３','敵４'];
   el.innerHTML = tekis.map(teki => {
-    const badge = `<span class="tbadge t${teki.replace('敵','')}" style="margin-left:6px;">${teki}</span>`;
+    const badge = `<span class="tbadge ${tekiClass(teki)}" style="margin-left:6px;">${teki}</span>`;
     const body = isFlat(teki)
       ? renderFlatBody(teki, ec[teki]||[])
       : renderHierBody(ec[teki]||{});
@@ -1745,7 +1808,7 @@ function renderAnalytics() {
     const td = expAgg[teki];
     if (!td) return;
     const color = TEKI_COLORS[teki] || 'var(--primary)';
-    const tc = `t${teki.replace('敵','')}`;
+    const tc = tekiClass(teki);
     const blockId = `anl-${teki}`;
     html += `
       <div class="anl-teki-block">
@@ -1903,7 +1966,7 @@ function renderList() {
           </div>`;
       } else {
         const e = x;
-        const tc = `t${(e.teki||'敵２').replace('敵','')}`;
+        const tc = tekiClass(e.teki||'敵２');
         const autoBadge = e.auto ? `<span class="auto-badge">自動</span>` : '';
         const noCcBadge = e.noCc ? `<span class="tbadge" style="background:#f0f0f5;color:#636366;">🏦銀行引落</span>` : '';
         const payLabel = e.payType ? `💰 ${e.payType}` : '💳 銀行振込';
@@ -1995,16 +2058,18 @@ function renderRecList() {
   const el = document.getElementById('rec-list');
   if (!recs.length) {
     el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">定期支出が登録されていません</div>`;
+    applyRecListOpen();
     return;
   }
-  el.innerHTML = recs.map(r => {
+  el.innerHTML = recs.map((r, idx) => {
     const md = mdata(curMonth);
     const already = (md.expenses||[]).some(e => e.recId === r.id);
     return `
-    <div class="rec-item" onclick="openRecModal('${r.id}')">
+    <div class="rec-item" data-idx="${idx}" onclick="openRecModal('${r.id}')">
+      <span class="drag-handle" data-idx="${idx}" onclick="event.stopPropagation()">⠿</span>
       <div class="rec-info">
         <div class="rec-name">${esc(r.name)}</div>
-        <div class="rec-meta">${r.category ? `<span class="tbadge t1">${esc(r.category)}</span> ` : ''}${r.payType||'銀行振込'}</div>
+        <div class="rec-meta">${r.category ? `<span class="tbadge t1">${esc(r.category)}</span> ` : ''}${r.payType||'銀行振込'}${r.noCc?' · CC対象外':''}</div>
       </div>
       <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
         <div class="rec-amount">${yen(r.amount)}</div>
@@ -2016,6 +2081,93 @@ function renderRecList() {
       </div>
     </div>`;
   }).join('');
+  // bind drag handles
+  el.querySelectorAll('.drag-handle').forEach(h => {
+    h.addEventListener('touchstart', e => recDragStart(e, parseInt(h.dataset.idx)), { passive: false });
+  });
+  applyRecListOpen();
+}
+
+// ── rec list collapse ──
+function toggleRecList() {
+  recListOpen = !recListOpen;
+  localStorage.setItem('recListOpen', recListOpen);
+  applyRecListOpen();
+}
+function applyRecListOpen() {
+  const wrap = document.getElementById('rec-list-wrap');
+  const arrow = document.getElementById('rec-toggle-arrow');
+  if (!wrap) return;
+  if (recListOpen) {
+    wrap.style.maxHeight = wrap.scrollHeight + 'px';
+    if (arrow) { arrow.classList.add('open'); }
+  } else {
+    wrap.style.maxHeight = '0';
+    if (arrow) { arrow.classList.remove('open'); }
+  }
+}
+
+// ── rec drag-reorder ──
+function recDragStart(e, idx) {
+  e.preventDefault();
+  const el = e.currentTarget.closest('.rec-item');
+  const rect = el.getBoundingClientRect();
+  const touchY = e.touches[0].clientY;
+  const clone = el.cloneNode(true);
+  Object.assign(clone.style, {
+    position:'fixed', left:rect.left+'px', top:rect.top+'px',
+    width:rect.width+'px', margin:'0', zIndex:'9999',
+    pointerEvents:'none', opacity:'0.95',
+    boxShadow:'0 8px 32px rgba(0,0,0,0.5)',
+    transform:'scale(1.02)', borderRadius:'10px',
+  });
+  document.body.appendChild(clone);
+  el.classList.add('rec-dragging');
+  recDrag = { srcIdx: idx, dropIdx: idx, origEl: el, clone, offsetY: touchY - rect.top };
+  document.addEventListener('touchmove', recDragMove, { passive: false });
+  document.addEventListener('touchend', recDragEnd);
+}
+function recDragMove(e) {
+  if (!recDrag) return;
+  e.preventDefault();
+  const touchY = e.touches[0].clientY;
+  recDrag.clone.style.top = (touchY - recDrag.offsetY) + 'px';
+  // compute drop index (insert-before index in full list)
+  const items = Array.from(document.querySelectorAll('#rec-list .rec-item'));
+  let dropIdx = items.length;
+  for (let i = 0; i < items.length; i++) {
+    const r = items[i].getBoundingClientRect();
+    if (touchY < r.top + r.height / 2) { dropIdx = i; break; }
+  }
+  recDrag.dropIdx = dropIdx;
+  // visual indicator
+  items.forEach(item => { item.style.borderTop = ''; item.style.borderBottom = ''; });
+  if (dropIdx < items.length) {
+    items[dropIdx].style.borderTop = '2px solid var(--primary)';
+  } else if (items.length > 0) {
+    items[items.length-1].style.borderBottom = '2px solid var(--primary)';
+  }
+}
+function recDragEnd() {
+  if (!recDrag) return;
+  document.removeEventListener('touchmove', recDragMove);
+  document.removeEventListener('touchend', recDragEnd);
+  const { srcIdx, dropIdx, clone, origEl } = recDrag;
+  recDrag = null;
+  clone.remove();
+  origEl.classList.remove('rec-dragging');
+  document.querySelectorAll('#rec-list .rec-item').forEach(item => {
+    item.style.borderTop = ''; item.style.borderBottom = '';
+  });
+  // convert insert-before index to actual array insert position
+  let insertAt = dropIdx > srcIdx ? dropIdx - 1 : dropIdx;
+  if (insertAt !== srcIdx) {
+    const recs = D.settings.recurring;
+    const [removed] = recs.splice(srcIdx, 1);
+    recs.splice(insertAt, 0, removed);
+    save();
+  }
+  renderRecList();
 }
 
 // ═══════════════════════════════════════════════════
@@ -2464,6 +2616,7 @@ function openRecModal(id) {
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.day;
     document.getElementById('rec-pay').value = r.payType||'';
+    document.getElementById('rec-no-cc').checked = !!r.noCc;
     selRecSatVal = r.sat||'○';
     document.getElementById('rec-del-btn').style.display = '';
   } else {
@@ -2473,6 +2626,7 @@ function openRecModal(id) {
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = '';
     document.getElementById('rec-pay').value = '';
+    document.getElementById('rec-no-cc').checked = false;
     selRecSatVal = '○';
     document.getElementById('rec-del-btn').style.display = 'none';
   }
@@ -2495,6 +2649,7 @@ function saveRec() {
     name, amount, day,
     category: document.getElementById('rec-category').value||'',
     payType: document.getElementById('rec-pay').value,
+    noCc: document.getElementById('rec-no-cc').checked,
     sat: selRecSatVal,
     active: true
   };
@@ -2541,7 +2696,7 @@ function applyRecurring(recId) {
     payType: r.payType||'',
     budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
     transferAmt: 0,
-    noCc: false,
+    noCc: !!r.noCc,
     nmType: null, nmAmt: null,
     auto: false
   };
