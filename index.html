@@ -6,16 +6,16 @@
   <title>家計簿</title>
   <style>
     :root {
-      --primary: #007aff;
-      --danger: #ff3b30;
-      --warning: #ff9500;
-      --success: #34c759;
-      --bg: #f2f2f7;
-      --card: #ffffff;
-      --text: #1c1c1e;
-      --sub: #8e8e93;
-      --sep: #e5e5ea;
-      --fill: #f2f2f7;
+      --primary: #0a84ff;
+      --danger: #ff453a;
+      --warning: #ff9f0a;
+      --success: #30d158;
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f2f2f7;
+      --sub: #98989d;
+      --sep: #38383a;
+      --fill: #2c2c2e;
     }
     * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     body {
@@ -30,7 +30,7 @@
 
     /* ── HEADER ── */
     .app-header {
-      background: rgba(255,255,255,0.9);
+      background: rgba(28,28,30,0.9);
       backdrop-filter: blur(20px);
       border-bottom: 0.5px solid var(--sep);
       position: sticky; top:0; z-index:100;
@@ -134,7 +134,7 @@
     }
     .fi:focus, .fs:focus {
       outline: none; border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+      box-shadow: 0 0 0 3px rgba(10,132,255,0.2);
     }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
@@ -146,7 +146,7 @@
       background: var(--card); font-size: 18px;
       cursor: pointer; text-align: center;
     }
-    .sat-btn.on { border-color: var(--primary); background: rgba(0,122,255,0.08); }
+    .sat-btn.on { border-color: var(--primary); background: rgba(10,132,255,0.15); }
 
     /* transfer display */
     .transfer-box {
@@ -200,11 +200,11 @@
 
     /* teki badges */
     .tbadge { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 500; }
-    .t1 { background: #e3f2fd; color: #1565c0; }
-    .t2 { background: #e8f5e9; color: #2e7d32; }
-    .t3 { background: #fff3e0; color: #e65100; }
-    .t4 { background: #fce4ec; color: #b71c1c; }
-    .auto-badge { font-size: 10px; background: rgba(0,122,255,0.1); color: var(--primary); padding: 1px 5px; border-radius: 4px; }
+    .t1 { background: rgba(10,132,255,0.2); color: #4da3ff; }
+    .t2 { background: rgba(48,209,88,0.2); color: #34c759; }
+    .t3 { background: rgba(255,159,10,0.2); color: #ff9f0a; }
+    .t4 { background: rgba(255,69,58,0.2); color: #ff6b6b; }
+    .auto-badge { font-size: 10px; background: rgba(10,132,255,0.2); color: var(--primary); padding: 1px 5px; border-radius: 4px; }
     .nm-badge { font-size: 10px; background: rgba(255,149,0,0.15); color: var(--warning); padding: 1px 5px; border-radius: 4px; }
 
     .empty-state { text-align: center; padding: 48px 16px; color: var(--sub); }
@@ -247,7 +247,7 @@
       position: fixed; bottom: 0;
       left: 50%; transform: translateX(-50%);
       width: 100%; max-width: 430px;
-      background: rgba(255,255,255,0.93);
+      background: rgba(28,28,30,0.93);
       backdrop-filter: blur(20px);
       border-top: 0.5px solid var(--sep);
       display: flex; z-index: 200;
@@ -310,7 +310,7 @@
       padding: 28px 16px; text-align: center; cursor: pointer;
       transition: all .2s;
     }
-    .drop-zone.over { border-color: var(--primary); background: rgba(0,122,255,0.04); }
+    .drop-zone.over { border-color: var(--primary); background: rgba(10,132,255,0.1); }
     .drop-icon { font-size: 36px; margin-bottom: 8px; }
     .drop-text { font-size: 14px; color: var(--sub); }
     .drop-sub { font-size: 12px; color: var(--sub); margin-top: 4px; }
@@ -1225,10 +1225,16 @@ function nextMk(k) {
 }
 function yen(n) { return '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
 function yenSigned(n) { return (n < 0 ? '-¥' : '¥') + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
-function parseYen(s) { return parseFloat(String(s).replace(/[¥,￥]/g,''))||0; }
-function fmtInput(el) { const n=parseYen(el.value); el.value = n ? '¥'+Math.round(n).toLocaleString('ja-JP') : ''; }
-function unfmtInput(el) { const n=parseYen(el.value); el.value = n || ''; }
+function parseYen(s) { return parseFloat(String(s).replace(/[¥￥,，\s]/g,''))||0; }
+function fmtYenVal(n) { return n ? (n<0?'-¥':'¥') + Math.abs(Math.round(n)).toLocaleString('ja-JP') : ''; }
+function fmtInput(el) { el.value = fmtYenVal(parseYen(el.value)); }
+function unfmtInput(el) { const n=parseYen(el.value); el.value = n!==0 ? n : ''; }
 function roundUp500(n) { return n <= 0 ? 0 : Math.ceil(n / 500) * 500; }
+// 特別費・配当金・敵３は500円切り上げなし（支出額＝支払元予算）
+const NO_ROUNDUP_CATS = new Set(['特別費','配当金','敵３']);
+function calcBudgetAlloc(amount, payType) {
+  return NO_ROUNDUP_CATS.has(payType) ? (amount <= 0 ? 0 : amount) : roundUp500(amount);
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -1254,7 +1260,7 @@ function budgetBalance(mk, cat) {
   }
   const spent = (md.expenses||[])
     .filter(e => e.payType === cat)
-    .reduce((s,e) => s + (e.amount||0), 0);
+    .reduce((s,e) => s + (e.budgetAlloc != null ? e.budgetAlloc : (e.amount||0)), 0);
   return total - spent;
 }
 
@@ -1298,7 +1304,7 @@ function generateRecurring(mk) {
       teki: '敵１',
       category: r.category||'',
       subcategory: '',
-      budgetAlloc: roundUp500(amt),
+      budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
       transferAmt: 0,
       noCc: false,
       nmType: null, nmAmt: null,
@@ -1854,7 +1860,7 @@ function refreshBankDisplay() {
     `予算残高: ${yenSigned(budgetSum)}　銀行振込: ${yen(transferSum)}　前月CC: ${yenSigned(prevCredit)}`;
   const pcEl = document.getElementById('prev-credit-input');
   if (document.activeElement !== pcEl) {
-    pcEl.value = prevCredit ? '¥' + Math.abs(Math.round(prevCredit)).toLocaleString('ja-JP') : '';
+    pcEl.value = fmtYenVal(prevCredit);
   }
 }
 
@@ -1939,24 +1945,23 @@ function renderSettings() {
   // budgets
   const carryoverCats = ['特別費','配当金','敵３','投資待機資金'];
   const monthlyCats   = ['食料品','お小遣い','日用品'];
-  const fmtVal = n => (n ? '¥' + Math.round(n).toLocaleString('ja-JP') : '');
   const budgetRow = cat => `
     <div class="set-row">
       <span class="set-label">${esc(cat)}</span>
       <input class="set-input" type="text" inputmode="numeric"
-             value="${fmtVal(D.settings.budgets[cat]||0)}"
+             value="${fmtYenVal(D.settings.budgets[cat]||0)}"
              onfocus="unfmtInput(this)"
              onblur="fmtInput(this);saveBudget('${cat}',this.value)">
     </div>`;
   document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(budgetRow).join('');
   document.getElementById('budget-settings-monthly').innerHTML   = monthlyCats.map(budgetRow).join('');
-  // adjustments
+  // adjustments（マイナス入力可 → inputmode="text"でフルキーボード）
   const md = mdata(curMonth);
   document.getElementById('adj-settings').innerHTML = CATS.map(cat => `
     <div class="set-row">
       <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="text" inputmode="numeric"
-             value="${fmtVal((md.adj||{})[cat]||0)}"
+      <input class="set-input" type="text" inputmode="text"
+             value="${fmtYenVal((md.adj||{})[cat]||0)}"
              onfocus="unfmtInput(this)"
              onblur="fmtInput(this);saveAdj('${cat}',this.value)">
     </div>`).join('');
@@ -2079,7 +2084,8 @@ function openEdit(id) {
 
 function onAmountInput() {
   const v = parseFloat(document.getElementById('f-amount').value)||0;
-  document.getElementById('transfer-disp').textContent = yen(roundUp500(v));
+  const payType = document.getElementById('f-pay').value;
+  document.getElementById('transfer-disp').textContent = yen(calcBudgetAlloc(v, payType));
 }
 
 function selSat(s) { selSatVal = s; updateSatUI(); }
@@ -2108,7 +2114,7 @@ function submitExpense() {
     subcategory: document.getElementById('f-subcategory').value||'',
     payType: document.getElementById('f-pay').value,
     sat: selSatVal,
-    budgetAlloc: roundUp500(amount),
+    budgetAlloc: calcBudgetAlloc(amount, document.getElementById('f-pay').value),
     transferAmt: parseFloat(document.getElementById('f-transfer-amt').value)||0,
     noCc: document.getElementById('f-no-cc').checked,
     nmType, nmAmt,
@@ -2532,7 +2538,7 @@ function applyRecurring(recId) {
     category: r.category||'',
     subcategory: '',
     payType: r.payType||'',
-    budgetAlloc: roundUp500(amt),
+    budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
     transferAmt: 0,
     noCc: false,
     nmType: null, nmAmt: null,
