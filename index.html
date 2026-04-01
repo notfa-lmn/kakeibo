@@ -459,13 +459,6 @@
     <div class="bank-card-label">楽天銀行残高（理論値）</div>
     <div class="bank-card-value" id="bank-val">¥0</div>
     <div class="bank-card-detail" id="bank-detail"></div>
-    <div class="credit-row">
-      <span class="credit-label">前月クレジット支払額</span>
-      <input class="credit-input" type="text" inputmode="numeric" id="prev-credit-input"
-             placeholder="¥0"
-             onfocus="unfmtInput(this)"
-             onblur="fmtInput(this);savePrevCredit(this.value)">
-    </div>
   </div>
 
   <!-- Totals row -->
@@ -735,9 +728,17 @@
       <button class="sheet-close" onclick="closeRecModal()">✕</button>
     </div>
     <div class="form-wrap" style="padding-top:0;">
-      <div class="fg">
-        <label>費目</label>
-        <input class="fi" type="text" id="rec-name" placeholder="例：家賃">
+      <div class="form-row">
+        <div class="fg">
+          <label>カテゴリ</label>
+          <select class="fs" id="rec-category" onchange="onRecCategoryChange()">
+            <option value="">選択（任意）</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>費目</label>
+          <input class="fi" type="text" id="rec-name" placeholder="例：家賃">
+        </div>
       </div>
       <div class="form-row">
         <div class="fg">
@@ -1116,6 +1117,8 @@ function generateRecurring(mk) {
       name: r.name, amount: amt,
       payType: r.payType||'',
       teki: '敵１',
+      category: r.category||'',
+      subcategory: '',
       budgetAlloc: roundUp500(amt),
       transferAmt: 0,
       noCc: false,
@@ -1493,7 +1496,7 @@ function renderRecList() {
     <div class="rec-item" onclick="openRecModal('${r.id}')">
       <div class="rec-info">
         <div class="rec-name">${esc(r.name)}</div>
-        <div class="rec-meta">${r.payType||'銀行振込'}</div>
+        <div class="rec-meta">${r.category ? `<span class="tbadge t1">${esc(r.category)}</span> ` : ''}${r.payType||'銀行振込'}</div>
       </div>
       <div class="rec-right">
         <div class="rec-amount">${yen(r.amount)}</div>
@@ -1806,6 +1809,20 @@ function importData(event) {
 // ═══════════════════════════════════════════════════
 //  RECURRING MODAL
 // ═══════════════════════════════════════════════════
+function populateRecCategory(selectedVal) {
+  const sel = document.getElementById('rec-category');
+  sel.innerHTML = '<option value="">選択（任意）</option>';
+  (EXPENSE_CATS['敵１']._items||[]).forEach(item => {
+    sel.innerHTML += `<option value="${esc(item)}"${selectedVal===item?' selected':''}>${esc(item)}</option>`;
+  });
+}
+
+function onRecCategoryChange() {
+  const cat = document.getElementById('rec-category').value;
+  const nameEl = document.getElementById('rec-name');
+  if (cat && !nameEl.value) nameEl.value = cat;
+}
+
 function openRecModal(id) {
   editRecId = id;
   const modal = document.getElementById('rec-modal');
@@ -1813,6 +1830,7 @@ function openRecModal(id) {
     const r = (D.settings.recurring||[]).find(x => x.id === id);
     if (!r) return;
     document.getElementById('rec-modal-title').textContent = '定期支出を編集';
+    populateRecCategory(r.category||'');
     document.getElementById('rec-name').value = r.name;
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.day;
@@ -1821,6 +1839,7 @@ function openRecModal(id) {
     document.getElementById('rec-del-btn').style.display = '';
   } else {
     document.getElementById('rec-modal-title').textContent = '定期支出を追加';
+    populateRecCategory('');
     document.getElementById('rec-name').value = '';
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = '';
@@ -1845,6 +1864,7 @@ function saveRec() {
   if (!name || amount <= 0 || day < 1 || day > 31) { alert('費目・金額・日付を正しく入力してください'); return; }
   const rec = {
     name, amount, day,
+    category: document.getElementById('rec-category').value||'',
     payType: document.getElementById('rec-pay').value,
     sat: selRecSatVal,
     active: true
