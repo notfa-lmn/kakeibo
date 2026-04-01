@@ -459,6 +459,13 @@
     <div class="bank-card-label">楽天銀行残高（理論値）</div>
     <div class="bank-card-value" id="bank-val">¥0</div>
     <div class="bank-card-detail" id="bank-detail"></div>
+    <div class="credit-row">
+      <span class="credit-label">前月クレジット支払額</span>
+      <input class="credit-input" type="text" inputmode="numeric" id="prev-credit-input"
+             placeholder="¥0"
+             onfocus="unfmtInput(this)"
+             onblur="fmtInput(this);savePrevCredit(this.value)">
+    </div>
   </div>
 
   <!-- Totals row -->
