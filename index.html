@@ -334,6 +334,73 @@
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
     .spacer { height: 16px; }
 
+    /* ── ANALYTICS ── */
+    .anl-section { margin-top: 16px; }
+    .anl-section-title {
+      font-size: 13px; font-weight: 700; color: var(--sub);
+      text-transform: uppercase; letter-spacing: .5px;
+      padding: 12px 0 6px;
+    }
+    .anl-total-card {
+      background: var(--card); border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .anl-total-label { font-size: 14px; font-weight: 600; }
+    .anl-total-value { font-size: 20px; font-weight: 700; }
+    .anl-teki-block {
+      background: var(--card); border-radius: 12px;
+      margin-bottom: 10px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .anl-teki-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px; cursor: pointer;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .anl-teki-hdr-left { display: flex; align-items: center; gap: 8px; }
+    .anl-teki-name { font-size: 15px; font-weight: 700; }
+    .anl-teki-total { font-size: 16px; font-weight: 700; }
+    .anl-teki-body { display: none; }
+    .anl-teki-body.open { display: block; }
+    .anl-cat-row {
+      padding: 10px 16px 6px;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .anl-cat-row:last-child { border-bottom: none; padding-bottom: 10px; }
+    .anl-cat-top {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .anl-cat-name { font-size: 14px; font-weight: 600; }
+    .anl-cat-amt  { font-size: 14px; font-weight: 600; }
+    .anl-bar-track { height: 4px; background: var(--fill); border-radius: 2px; margin-bottom: 6px; }
+    .anl-bar-fill  { height: 100%; border-radius: 2px; transition: width .4s; }
+    .anl-sub-row {
+      display: flex; justify-content: space-between;
+      padding: 2px 0 2px 12px; font-size: 12px; color: var(--sub);
+    }
+    .anl-income-row {
+      display: flex; justify-content: space-between;
+      padding: 9px 16px; border-bottom: 0.5px solid var(--sep);
+      font-size: 14px;
+    }
+    .anl-income-row:last-child { border-bottom: none; }
+    .anl-income-cat { font-weight: 600; }
+    .anl-income-sub { font-size: 12px; color: var(--sub); padding: 2px 16px 6px 28px; display: flex; justify-content: space-between; border-bottom: 0.5px solid var(--sep); }
+    .anl-income-sub:last-child { border-bottom: none; }
+    .anl-summary-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 8px;
+    }
+    .anl-kpi {
+      background: var(--card); border-radius: 12px;
+      padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .anl-kpi-label { font-size: 11px; color: var(--sub); margin-bottom: 3px; }
+    .anl-kpi-value { font-size: 18px; font-weight: 700; }
+
     /* ── REC APPLY BUTTON ── */
     .rec-apply-btn {
       font-size: 12px; font-weight: 600; font-family: inherit;
@@ -689,6 +756,16 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════ ANALYTICS -->
+<div id="scr-analytics" class="screen">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="navMonth(-1)">‹</button>
+    <span class="month-nav-label" id="anl-month"></span>
+    <button class="month-nav-btn" onclick="navMonth(1)">›</button>
+  </div>
+  <div id="anl-body" style="padding:0 16px 24px;"></div>
+</div>
+
 <!-- ═══════════════════════════════════ LIST -->
 <div id="scr-list" class="screen">
   <div class="month-nav">
@@ -776,11 +853,14 @@
       <button class="fab-menu-btn" onclick="closeFabMenu();openIncomeModal()">💰 収入を追加</button>
     </div>
   </div>
+  <button class="nav-btn" id="nav-analytics" onclick="switchScreen('analytics')">
+    <span class="nav-icon">📊</span>
+    <span class="nav-label">分析</span>
+  </button>
   <button class="nav-btn" id="nav-settings" onclick="switchScreen('settings')">
     <span class="nav-icon">⚙️</span>
     <span class="nav-label">設定</span>
   </button>
-  <button class="nav-btn" style="opacity:0;pointer-events:none;"></button>
 </nav>
 
 <!-- ═══════════════════════════════════ RECURRING MODAL -->
@@ -1526,11 +1606,11 @@ function switchScreen(name) {
   curScreen = name;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + name).classList.add('active');
-  ['summary','list','settings'].forEach(n => {
+  ['summary','list','analytics','settings'].forEach(n => {
     const el = document.getElementById('nav-' + n);
     if (el) el.classList.toggle('active', n === name);
   });
-  const titles = { summary:'サマリー', add:'支出を入力', list:'支出一覧', settings:'設定' };
+  const titles = { summary:'サマリー', add:'支出を入力', list:'支出一覧', analytics:'月次分析', settings:'設定' };
   document.getElementById('hdr-title').textContent = titles[name] || '';
   if (name === 'add') {
     if (!editId) resetForm();
@@ -1544,7 +1624,193 @@ function switchScreen(name) {
 function renderScreen() {
   if (curScreen === 'summary') renderSummary();
   else if (curScreen === 'list') renderList();
+  else if (curScreen === 'analytics') renderAnalytics();
   else if (curScreen === 'settings') renderSettings();
+}
+
+// ═══════════════════════════════════════════════════
+//  ANALYTICS
+// ═══════════════════════════════════════════════════
+function aggregateExpenses(mk) {
+  const exps = mdata(mk).expenses || [];
+  const result = {};
+  exps.forEach(e => {
+    const teki = e.teki || '敵２';
+    const cat  = e.category || '(未分類)';
+    const sub  = e.subcategory || '';
+    if (!result[teki]) result[teki] = { total:0, cats:{} };
+    result[teki].total += e.amount||0;
+    if (!result[teki].cats[cat]) result[teki].cats[cat] = { total:0, subs:{} };
+    result[teki].cats[cat].total += e.amount||0;
+    if (sub) {
+      result[teki].cats[cat].subs[sub] = (result[teki].cats[cat].subs[sub]||0) + (e.amount||0);
+    }
+  });
+  return result;
+}
+
+function aggregateIncomes(mk) {
+  const incomes = mdata(mk).incomes || [];
+  const result = { total:0, budgetIn:0, budgetOut:0, cats:{} };
+  incomes.forEach(i => {
+    result.total    += i.amount||0;
+    if (i.budgetType === '予算内') result.budgetIn += i.amount||0;
+    else result.budgetOut += i.amount||0;
+    const cat = i.category || '(未分類)';
+    const sub = i.subcategory || '';
+    if (!result.cats[cat]) result.cats[cat] = { total:0, subs:{} };
+    result.cats[cat].total += i.amount||0;
+    if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + (i.amount||0);
+  });
+  return result;
+}
+
+const TEKI_COLORS = { '敵１':'#1565c0','敵２':'#2e7d32','敵３':'#e65100','敵４':'#b71c1c' };
+
+function renderAnalytics() {
+  document.getElementById('anl-month').textContent = monthLabel(curMonth);
+  const expAgg = aggregateExpenses(curMonth);
+  const incAgg = aggregateIncomes(curMonth);
+  const expTotal = totalExpenses(curMonth);
+  const incTotal = incAgg.total;
+  const net = incTotal - expTotal;
+
+  let html = '';
+
+  // ── KPIサマリー ──
+  html += `
+    <div class="anl-section">
+      <div class="anl-section-title">月次サマリー</div>
+      <div class="anl-summary-grid">
+        <div class="anl-kpi">
+          <div class="anl-kpi-label">収入合計</div>
+          <div class="anl-kpi-value" style="color:var(--success);">${yen(incTotal)}</div>
+        </div>
+        <div class="anl-kpi">
+          <div class="anl-kpi-label">支出合計</div>
+          <div class="anl-kpi-value" style="color:var(--danger);">${yen(expTotal)}</div>
+        </div>
+        <div class="anl-kpi">
+          <div class="anl-kpi-label">収支（手取り）</div>
+          <div class="anl-kpi-value" style="color:${net>=0?'var(--success)':'var(--danger)'}">${yenSigned(net)}</div>
+        </div>
+        <div class="anl-kpi">
+          <div class="anl-kpi-label">クレジット支払計</div>
+          <div class="anl-kpi-value">${yen(creditTotal(curMonth))}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── 収入内訳 ──
+  if (incTotal > 0) {
+    html += `<div class="anl-section"><div class="anl-section-title">収入内訳</div><div class="anl-teki-block">`;
+    html += `<div class="anl-teki-hdr" onclick="anlToggle('anl-inc')">
+      <div class="anl-teki-hdr-left">
+        <span style="font-size:18px;">💰</span>
+        <span class="anl-teki-name">収入合計</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="anl-teki-total" style="color:var(--success);">${yen(incTotal)}</span>
+        <span style="color:var(--sub);font-size:14px;" id="arr-anl-inc">›</span>
+      </div>
+    </div>
+    <div class="anl-teki-body" id="anl-inc">`;
+    Object.entries(incAgg.cats).forEach(([cat, cv]) => {
+      const pct = incTotal > 0 ? Math.min(100, cv.total/incTotal*100) : 0;
+      html += `<div class="anl-cat-row">
+        <div class="anl-cat-top">
+          <span class="anl-cat-name">${esc(cat)}</span>
+          <span class="anl-cat-amt" style="color:var(--success);">${yen(cv.total)}</span>
+        </div>
+        <div class="anl-bar-track"><div class="anl-bar-fill" style="width:${pct}%;background:var(--success);"></div></div>`;
+      Object.entries(cv.subs).forEach(([sub, amt]) => {
+        html += `<div class="anl-sub-row"><span>${esc(sub)}</span><span>${yen(amt)}</span></div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div></div></div>`;
+  }
+
+  // ── 支出内訳（敵別） ──
+  html += `<div class="anl-section"><div class="anl-section-title">支出内訳</div>`;
+  const tekiOrder = ['敵１','敵２','敵３','敵４'];
+  tekiOrder.forEach(teki => {
+    const td = expAgg[teki];
+    if (!td) return;
+    const color = TEKI_COLORS[teki] || 'var(--primary)';
+    const tc = `t${teki.replace('敵','')}`;
+    const blockId = `anl-${teki}`;
+    html += `
+      <div class="anl-teki-block">
+        <div class="anl-teki-hdr" onclick="anlToggle('${blockId}')">
+          <div class="anl-teki-hdr-left">
+            <span class="tbadge ${tc}">${teki}</span>
+            <span class="anl-teki-name">${TEKI_LABELS[teki]||teki}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="anl-teki-total">${yen(td.total)}</span>
+            <span style="color:var(--sub);font-size:14px;" id="arr-${blockId}">›</span>
+          </div>
+        </div>
+        <div class="anl-teki-body" id="${blockId}">`;
+    // カテゴリ別
+    const sortedCats = Object.entries(td.cats).sort((a,b) => b[1].total - a[1].total);
+    sortedCats.forEach(([cat, cv]) => {
+      const pct = td.total > 0 ? Math.min(100, cv.total/td.total*100) : 0;
+      html += `<div class="anl-cat-row">
+        <div class="anl-cat-top">
+          <span class="anl-cat-name">${esc(cat)}</span>
+          <span class="anl-cat-amt">${yen(cv.total)}</span>
+        </div>
+        <div class="anl-bar-track"><div class="anl-bar-fill" style="width:${pct}%;background:${color};"></div></div>`;
+      const sortedSubs = Object.entries(cv.subs).sort((a,b) => b[1]-a[1]);
+      sortedSubs.forEach(([sub, amt]) => {
+        html += `<div class="anl-sub-row"><span>└ ${esc(sub)}</span><span>${yen(amt)}</span></div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+
+  // ── 前月比 ──
+  const prevKey = prevMk(curMonth);
+  if (D.months[prevKey]) {
+    const prevExp = aggregateExpenses(prevKey);
+    const prevTotal = totalExpenses(prevKey);
+    if (prevTotal > 0) {
+      const diff = expTotal - prevTotal;
+      html += `
+        <div class="anl-section">
+          <div class="anl-section-title">前月比較（${monthLabel(prevKey)}）</div>
+          <div class="anl-summary-grid">`;
+      tekiOrder.forEach(teki => {
+        const cur  = expAgg[teki]  ? expAgg[teki].total  : 0;
+        const prev = prevExp[teki] ? prevExp[teki].total : 0;
+        const d = cur - prev;
+        if (cur === 0 && prev === 0) return;
+        html += `<div class="anl-kpi">
+          <div class="anl-kpi-label">${teki}</div>
+          <div class="anl-kpi-value">${yen(cur)}</div>
+          <div style="font-size:11px;color:${d>0?'var(--danger)':d<0?'var(--success)':'var(--sub)'};">${d>0?'▲':'▼'} ${yen(Math.abs(d))}</div>
+        </div>`;
+      });
+      html += `<div class="anl-kpi">
+        <div class="anl-kpi-label">支出合計</div>
+        <div class="anl-kpi-value">${yen(expTotal)}</div>
+        <div style="font-size:11px;color:${diff>0?'var(--danger)':diff<0?'var(--success)':'var(--sub)'};">${diff>0?'▲':'▼'} ${yen(Math.abs(diff))}</div>
+      </div>`;
+      html += `</div></div>`;
+    }
+  }
+
+  document.getElementById('anl-body').innerHTML = html;
+}
+
+function anlToggle(id) {
+  document.getElementById(id).classList.toggle('open');
+  const arr = document.getElementById('arr-'+id);
+  if (arr) arr.textContent = document.getElementById(id).classList.contains('open') ? '˅' : '›';
 }
 
 // ═══════════════════════════════════════════════════
