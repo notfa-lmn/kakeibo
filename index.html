@@ -717,7 +717,7 @@
     <!-- Payment type -->
     <div class="fg">
       <label>支払種別（予算財布）</label>
-      <select class="fs" id="f-pay">
+      <select class="fs" id="f-pay" onchange="onAmountInput()">
         <option value="">― 種別なし（敵１ / 銀行振込）</option>
         <option value="特別費">特別費</option>
         <option value="配当金">配当金</option>
@@ -731,11 +731,8 @@
     <!-- 支払元予算 (auto) + 振込金額 (manual) -->
     <div class="form-row">
       <div class="fg">
-        <label>支払元予算（自動計算）</label>
-        <div class="transfer-box">
-          <span class="transfer-box-label">500円切り上げ</span>
-          <span class="transfer-box-value" id="transfer-disp">¥0</span>
-        </div>
+        <label>支払元予算（自動 / 手動上書き可）</label>
+        <input class="fi" type="number" id="transfer-disp" placeholder="自動計算" style="font-weight:700;color:var(--primary);">
       </div>
       <div class="fg">
         <label>振込金額（円）</label>
@@ -2470,7 +2467,7 @@ function resetForm() {
   document.getElementById('f-amount').value = '';
   document.getElementById('f-teki').value = '敵２';
   document.getElementById('f-pay').value = '';
-  document.getElementById('transfer-disp').textContent = '¥0';
+  document.getElementById('transfer-disp').value = '';
   document.getElementById('f-transfer-amt').value = '';
   document.getElementById('f-no-cc').checked = false;
   document.getElementById('receipt-preview-wrap').style.display = 'none';
@@ -2509,7 +2506,7 @@ function openEdit(id) {
     if (e.subcategory) document.getElementById('f-subcategory').value = e.subcategory;
   }
   document.getElementById('f-pay').value = e.payType||'';
-  document.getElementById('transfer-disp').textContent = yen(e.budgetAlloc || e.transfer || 0);
+  document.getElementById('transfer-disp').value = e.budgetAlloc != null ? e.budgetAlloc : (e.transfer || '');
   document.getElementById('f-transfer-amt').value = e.transferAmt||'';
   document.getElementById('f-no-cc').checked = e.noCc||false;
   document.getElementById('f-nm-type').value = e.nmType||'';
@@ -2529,7 +2526,7 @@ function openEdit(id) {
 function onAmountInput() {
   const v = parseFloat(document.getElementById('f-amount').value)||0;
   const payType = document.getElementById('f-pay').value;
-  document.getElementById('transfer-disp').textContent = yen(calcBudgetAlloc(v, payType));
+  document.getElementById('transfer-disp').value = calcBudgetAlloc(v, payType) || '';
 }
 
 function selSat(s) { selSatVal = s; updateSatUI(); }
@@ -2558,7 +2555,7 @@ function submitExpense() {
     subcategory: document.getElementById('f-subcategory').value||'',
     payType: document.getElementById('f-pay').value,
     sat: selSatVal,
-    budgetAlloc: calcBudgetAlloc(amount, document.getElementById('f-pay').value),
+    budgetAlloc: parseFloat(document.getElementById('transfer-disp').value) || calcBudgetAlloc(amount, document.getElementById('f-pay').value),
     transferAmt: parseFloat(document.getElementById('f-transfer-amt').value)||0,
     noCc: document.getElementById('f-no-cc').checked,
     nmType, nmAmt,
