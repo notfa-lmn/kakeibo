@@ -439,6 +439,12 @@
       display: inline-block; transition: transform 0.25s ease; font-size: 10px;
     }
     .rec-toggle-arrow.open { transform: rotate(180deg); }
+    .rec-group-hdr {
+      font-size: 11px; font-weight: 600; color: var(--sub);
+      padding: 12px 4px 4px; letter-spacing: 0.4px;
+      border-bottom: 0.5px solid var(--sep); margin-bottom: 6px;
+    }
+    .rec-group-hdr-first { padding-top: 0; border-top: none; }
 
     /* ── CATEGORY MANAGER ── */
     .cat-teki-block { background: var(--card); border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
@@ -845,6 +851,18 @@
       <div id="rec-list"></div>
     </div>
 
+    <!-- Recurring Income -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <button class="rec-toggle-btn" onclick="toggleRecIncList()" id="rec-inc-toggle-btn">
+        <span>定期収入 自動入力</span>
+        <span class="rec-toggle-arrow open" id="rec-inc-toggle-arrow">▼</span>
+      </button>
+      <button onclick="openRecIncModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
+    </div>
+    <div class="rec-list-wrap" id="rec-inc-list-wrap">
+      <div id="rec-inc-list"></div>
+    </div>
+
     <!-- Category management -->
     <div class="section-title" style="padding-left:0;">支出カテゴリの管理</div>
     <div id="cat-mgr"></div>
@@ -931,6 +949,17 @@
         </div>
       </div>
       <div class="fg">
+        <label>グループ</label>
+        <select class="fs" id="rec-group">
+          <option value="">未分類</option>
+          <option value="個人支払（支出）">個人支払（支出）</option>
+          <option value="個人支払（投資）">個人支払（投資）</option>
+          <option value="個人支払（社保）">個人支払（社保）</option>
+          <option value="事業支払">事業支払</option>
+          <option value="会社支払">会社支払</option>
+        </select>
+      </div>
+      <div class="fg">
         <label>支払種別（予算財布）</label>
         <select class="fs" id="rec-pay">
           <option value="">― 種別なし（銀行振込）</option>
@@ -959,6 +988,61 @@
       </label>
       <button class="btn btn-p" onclick="saveRec()">保存する</button>
       <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ RECURRING INCOME MODAL -->
+<div class="overlay" id="rec-inc-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="rec-inc-modal-title">定期収入を追加</span>
+      <button class="sheet-close" onclick="closeRecIncModal()">✕</button>
+    </div>
+    <div class="form-wrap" style="padding-top:0;">
+      <div class="form-row">
+        <div class="fg">
+          <label>収入名</label>
+          <input class="fi" type="text" id="rec-inc-name" placeholder="例：給与">
+        </div>
+        <div class="fg">
+          <label>金額（円）</label>
+          <input class="fi" type="number" id="rec-inc-amount" placeholder="0">
+        </div>
+      </div>
+      <div class="fg">
+        <label>毎月何日</label>
+        <input class="fi" type="number" id="rec-inc-day" min="1" max="31" placeholder="25">
+      </div>
+      <div class="form-row">
+        <div class="fg">
+          <label>カテゴリ</label>
+          <select class="fs" id="rec-inc-category" onchange="onRecIncCategoryChange()">
+            <option value="">選択</option>
+            <option value="給与">給与</option>
+            <option value="事業所得">事業所得</option>
+            <option value="配当金">配当金</option>
+            <option value="税調整">税調整</option>
+            <option value="その他入金">その他入金</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>サブカテゴリ</label>
+          <select class="fs" id="rec-inc-subcategory">
+            <option value="">選択</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label>予算種別</label>
+        <select class="fs" id="rec-inc-budget-type">
+          <option value="予算内">予算内</option>
+          <option value="予算外">予算外</option>
+        </select>
+      </div>
+      <button class="btn btn-p" onclick="saveRecInc()">保存する</button>
+      <button class="btn btn-d" id="rec-inc-del-btn" style="display:none;" onclick="deleteRecInc()">削除する</button>
     </div>
   </div>
 </div>
@@ -1098,6 +1182,7 @@ async function loadFromCloud() {
         D = cloud;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
         generateRecurring(curMonth);
+        generateRecurringIncome(curMonth);
         renderScreen();
       }
     } else {
@@ -1203,6 +1288,8 @@ let selRecSatVal = '○';
 let editRecId = null;
 let recListOpen = localStorage.getItem('recListOpen') !== 'false';
 let recDrag = null;
+let editRecIncId = null;
+let recIncListOpen = localStorage.getItem('recIncListOpen') !== 'false';
 
 // ═══════════════════════════════════════════════════
 //  DATA
@@ -1247,7 +1334,7 @@ function save() {
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], recDone:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], recDone:false, recIncDone:false };
   if (!D.months[key].adj) D.months[key].adj = {};
   if (!D.months[key].incomes) D.months[key].incomes = [];
   return D.months[key];
@@ -1360,9 +1447,37 @@ function generateRecurring(mk) {
   save();
 }
 
+function generateRecurringIncome(mk) {
+  const md = mdata(mk);
+  if (md.recIncDone) return;
+  const [yr, mo] = mk.split('-').map(Number);
+  const recs = D.settings.recurringIncome || [];
+  recs.filter(r => r.active !== false).forEach(r => {
+    if (md.incomes.some(x => x.recIncId === r.id)) return;
+    const maxDay = new Date(yr, mo, 0).getDate();
+    const day = Math.min(r.day||1, maxDay);
+    const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    md.incomes.push({
+      id: uid(), recIncId: r.id,
+      date: dateStr,
+      category: r.category||'',
+      subcategory: r.subcategory||'',
+      amount: r.amount||0,
+      budgetType: r.budgetType||'予算内',
+      memo: '',
+      auto: true
+    });
+  });
+  md.recIncDone = true;
+  save();
+}
+
 // ═══════════════════════════════════════════════════
 //  CATEGORY MANAGER
 // ═══════════════════════════════════════════════════
+const REC_GROUPS = ['個人支払（支出）','個人支払（投資）','個人支払（社保）','事業支払','会社支払'];
+const REC_GROUP_NONE = 'その他';
+
 const TEKI_LABELS = {
   '敵１':'敵１（固定月次）','敵２':'敵２（変動月次）',
   '敵３':'敵３（固定不定期）','敵４':'敵４（変動不定期）',
@@ -2019,8 +2134,10 @@ function renderSettings() {
              onfocus="unfmtInput(this)"
              onblur="fmtInput(this);saveAdj('${cat}',this.value)">
     </div>`).join('');
-  // recurring
+  // recurring expense
   renderRecList();
+  // recurring income
+  renderRecIncList();
   // category manager
   renderCatMgr();
 }
@@ -2043,6 +2160,158 @@ function saveAdj(cat, val) {
   save();
 }
 
+// ═══════════════════════════════════════════════════
+//  RECURRING INCOME
+// ═══════════════════════════════════════════════════
+function renderRecIncList() {
+  const recs = D.settings.recurringIncome||[];
+  const el = document.getElementById('rec-inc-list');
+  if (!recs.length) {
+    el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">定期収入が登録されていません</div>`;
+    applyRecIncListOpen();
+    return;
+  }
+  const md = mdata(curMonth);
+  el.innerHTML = recs.map((r, idx) => {
+    const already = (md.incomes||[]).some(x => x.recIncId === r.id);
+    return `
+    <div class="rec-item" onclick="openRecIncModal('${r.id}')">
+      <div class="rec-info">
+        <div class="rec-name">${esc(r.name)}</div>
+        <div class="rec-meta">${r.category ? `<span class="tbadge" style="background:rgba(48,209,88,0.2);color:#34c759;">${esc(r.category)}</span> ` : ''}${r.subcategory ? esc(r.subcategory) : ''}</div>
+      </div>
+      <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <div class="rec-amount" style="color:var(--success);">${yen(r.amount)}</div>
+        <span class="rec-day">毎月${r.day}日</span>
+        <button class="rec-apply-btn ${already?'applied':''}"
+          onclick="event.stopPropagation();applyRecurringIncome('${r.id}')">
+          ${already ? '✓ 反映済' : '＋ 反映'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+  applyRecIncListOpen();
+}
+
+function toggleRecIncList() {
+  recIncListOpen = !recIncListOpen;
+  localStorage.setItem('recIncListOpen', recIncListOpen);
+  applyRecIncListOpen();
+}
+function applyRecIncListOpen() {
+  const wrap = document.getElementById('rec-inc-list-wrap');
+  const arrow = document.getElementById('rec-inc-toggle-arrow');
+  if (!wrap) return;
+  if (recIncListOpen) {
+    wrap.classList.add('open');
+    if (arrow) arrow.classList.add('open');
+  } else {
+    wrap.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+  }
+}
+
+function onRecIncCategoryChange() {
+  const cat = document.getElementById('rec-inc-category').value;
+  const sub = document.getElementById('rec-inc-subcategory');
+  sub.innerHTML = '<option value="">選択</option>';
+  if (cat && INCOME_CATS[cat]) {
+    INCOME_CATS[cat].forEach(item => {
+      sub.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
+    });
+  }
+}
+
+function openRecIncModal(id) {
+  editRecIncId = id;
+  const modal = document.getElementById('rec-inc-modal');
+  if (id) {
+    const r = (D.settings.recurringIncome||[]).find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('rec-inc-modal-title').textContent = '定期収入を編集';
+    document.getElementById('rec-inc-name').value = r.name;
+    document.getElementById('rec-inc-amount').value = r.amount;
+    document.getElementById('rec-inc-day').value = r.day;
+    document.getElementById('rec-inc-category').value = r.category||'';
+    onRecIncCategoryChange();
+    document.getElementById('rec-inc-subcategory').value = r.subcategory||'';
+    document.getElementById('rec-inc-budget-type').value = r.budgetType||'予算内';
+    document.getElementById('rec-inc-del-btn').style.display = '';
+  } else {
+    document.getElementById('rec-inc-modal-title').textContent = '定期収入を追加';
+    document.getElementById('rec-inc-name').value = '';
+    document.getElementById('rec-inc-amount').value = '';
+    document.getElementById('rec-inc-day').value = '';
+    document.getElementById('rec-inc-category').value = '';
+    document.getElementById('rec-inc-subcategory').innerHTML = '<option value="">選択</option>';
+    document.getElementById('rec-inc-budget-type').value = '予算内';
+    document.getElementById('rec-inc-del-btn').style.display = 'none';
+  }
+  modal.classList.add('open');
+}
+function closeRecIncModal() { document.getElementById('rec-inc-modal').classList.remove('open'); }
+
+function saveRecInc() {
+  const name = document.getElementById('rec-inc-name').value.trim();
+  const amount = parseFloat(document.getElementById('rec-inc-amount').value)||0;
+  const day = parseInt(document.getElementById('rec-inc-day').value)||0;
+  if (!name || amount < 0 || day < 1 || day > 31) { alert('収入名・金額・日付を正しく入力してください'); return; }
+  const rec = {
+    name, amount, day,
+    category: document.getElementById('rec-inc-category').value||'',
+    subcategory: document.getElementById('rec-inc-subcategory').value||'',
+    budgetType: document.getElementById('rec-inc-budget-type').value||'予算内',
+    active: true
+  };
+  if (!D.settings.recurringIncome) D.settings.recurringIncome = [];
+  if (editRecIncId) {
+    const idx = D.settings.recurringIncome.findIndex(r => r.id === editRecIncId);
+    if (idx !== -1) D.settings.recurringIncome[idx] = { ...D.settings.recurringIncome[idx], ...rec };
+  } else {
+    D.settings.recurringIncome.push({ id: uid(), ...rec });
+  }
+  mdata(curMonth).recIncDone = false;
+  save();
+  generateRecurringIncome(curMonth);
+  save();
+  closeRecIncModal();
+  renderRecIncList();
+}
+
+function deleteRecInc() {
+  if (!editRecIncId || !confirm('この定期収入を削除しますか？')) return;
+  D.settings.recurringIncome = (D.settings.recurringIncome||[]).filter(r => r.id !== editRecIncId);
+  save();
+  closeRecIncModal();
+  renderRecIncList();
+}
+
+function applyRecurringIncome(recId) {
+  const r = (D.settings.recurringIncome||[]).find(x => x.id === recId);
+  if (!r) return;
+  const [yr, mo] = curMonth.split('-').map(Number);
+  const maxDay = new Date(yr, mo, 0).getDate();
+  const day = Math.min(r.day||1, maxDay);
+  const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const md = mdata(curMonth);
+  const existing = (md.incomes||[]).find(x => x.recIncId === recId);
+  const obj = {
+    recIncId: recId, date: dateStr,
+    category: r.category||'', subcategory: r.subcategory||'',
+    amount: r.amount||0, budgetType: r.budgetType||'予算内',
+    memo: '', auto: false
+  };
+  if (existing) {
+    const idx = md.incomes.findIndex(x => x.recIncId === recId);
+    md.incomes[idx] = { ...md.incomes[idx], ...obj };
+  } else {
+    md.incomes.push({ id: uid(), ...obj });
+  }
+  save();
+  renderRecIncList();
+  renderScreen();
+}
+
 function renderRecList() {
   const recs = D.settings.recurring||[];
   const el = document.getElementById('rec-list');
@@ -2051,29 +2320,45 @@ function renderRecList() {
     applyRecListOpen();
     return;
   }
-  el.innerHTML = recs.map((r, idx) => {
-    const md = mdata(curMonth);
-    const already = (md.expenses||[]).some(e => e.recId === r.id);
-    return `
-    <div class="rec-item" data-idx="${idx}" onclick="openRecModal('${r.id}')">
-      <span class="drag-handle" data-idx="${idx}" onclick="event.stopPropagation()">⠿</span>
-      <div class="rec-info">
-        <div class="rec-name">${esc(r.name)}</div>
-        <div class="rec-meta">${r.category ? `<span class="tbadge t1">${esc(r.category)}</span> ` : ''}${r.payType||'銀行振込'}${r.noCc?' · CC対象外':''}</div>
-      </div>
-      <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-        <div class="rec-amount">${yen(r.amount)}</div>
-        <span class="rec-day">毎月${r.day}日</span>
-        <button class="rec-apply-btn ${already?'applied':''}"
-          onclick="event.stopPropagation();applyRecurring('${r.id}')">
-          ${already ? '✓ 反映済' : '＋ 反映'}
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-  // bind drag handles
+  // グループ別に振り分け（配列順を維持）
+  const groupOrder = [...REC_GROUPS, REC_GROUP_NONE];
+  const grouped = {};
+  groupOrder.forEach(g => grouped[g] = []);
+  recs.forEach((r, idx) => {
+    const g = r.group && grouped[r.group] !== undefined ? r.group : REC_GROUP_NONE;
+    grouped[g].push({ r, idx });
+  });
+  const md = mdata(curMonth);
+  let html = '';
+  let isFirst = true;
+  groupOrder.forEach(grpName => {
+    const items = grouped[grpName];
+    if (!items.length) return;
+    html += `<div class="rec-group-hdr${isFirst?' rec-group-hdr-first':''}">${grpName}</div>`;
+    isFirst = false;
+    items.forEach(({ r, idx }) => {
+      const already = (md.expenses||[]).some(e => e.recId === r.id);
+      html += `
+      <div class="rec-item" data-idx="${idx}" data-group="${esc(grpName)}" onclick="openRecModal('${r.id}')">
+        <span class="drag-handle" data-idx="${idx}" data-group="${esc(grpName)}" onclick="event.stopPropagation()">⠿</span>
+        <div class="rec-info">
+          <div class="rec-name">${esc(r.name)}</div>
+          <div class="rec-meta">${r.category?`<span class="tbadge t1">${esc(r.category)}</span> `:''}${r.payType||'銀行振込'}${r.noCc?' · CC対象外':''}</div>
+        </div>
+        <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+          <div class="rec-amount">${yen(r.amount)}</div>
+          <span class="rec-day">毎月${r.day}日</span>
+          <button class="rec-apply-btn ${already?'applied':''}"
+            onclick="event.stopPropagation();applyRecurring('${r.id}')">
+            ${already ? '✓ 反映済' : '＋ 反映'}
+          </button>
+        </div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
   el.querySelectorAll('.drag-handle').forEach(h => {
-    h.addEventListener('touchstart', e => recDragStart(e, parseInt(h.dataset.idx)), { passive: false });
+    h.addEventListener('touchstart', e => recDragStart(e, parseInt(h.dataset.idx), h.dataset.group), { passive: false });
   });
   applyRecListOpen();
 }
@@ -2097,8 +2382,8 @@ function applyRecListOpen() {
   }
 }
 
-// ── rec drag-reorder ──
-function recDragStart(e, idx) {
+// ── rec drag-reorder（グループ内限定） ──
+function recDragStart(e, idx, group) {
   e.preventDefault();
   const el = e.currentTarget.closest('.rec-item');
   const rect = el.getBoundingClientRect();
@@ -2113,7 +2398,7 @@ function recDragStart(e, idx) {
   });
   document.body.appendChild(clone);
   el.classList.add('rec-dragging');
-  recDrag = { srcIdx: idx, dropIdx: idx, origEl: el, clone, offsetY: touchY - rect.top };
+  recDrag = { srcIdx: idx, srcGroup: group, dropJ: null, origEl: el, clone, offsetY: touchY - rect.top };
   document.addEventListener('touchmove', recDragMove, { passive: false });
   document.addEventListener('touchend', recDragEnd);
 }
@@ -2122,40 +2407,47 @@ function recDragMove(e) {
   e.preventDefault();
   const touchY = e.touches[0].clientY;
   recDrag.clone.style.top = (touchY - recDrag.offsetY) + 'px';
-  // compute drop index (insert-before index in full list)
-  const items = Array.from(document.querySelectorAll('#rec-list .rec-item'));
-  let dropIdx = items.length;
-  for (let i = 0; i < items.length; i++) {
-    const r = items[i].getBoundingClientRect();
-    if (touchY < r.top + r.height / 2) { dropIdx = i; break; }
+  // 同グループのアイテムのみ対象
+  const allItems = Array.from(document.querySelectorAll('#rec-list .rec-item'));
+  const grpItems = allItems.filter(item => item.dataset.group === recDrag.srcGroup);
+  let dropJ = grpItems.length;
+  for (let j = 0; j < grpItems.length; j++) {
+    const r = grpItems[j].getBoundingClientRect();
+    if (touchY < r.top + r.height / 2) { dropJ = j; break; }
   }
-  recDrag.dropIdx = dropIdx;
-  // visual indicator
-  items.forEach(item => { item.style.borderTop = ''; item.style.borderBottom = ''; });
-  if (dropIdx < items.length) {
-    items[dropIdx].style.borderTop = '2px solid var(--primary)';
-  } else if (items.length > 0) {
-    items[items.length-1].style.borderBottom = '2px solid var(--primary)';
+  recDrag.dropJ = dropJ;
+  allItems.forEach(item => { item.style.borderTop = ''; item.style.borderBottom = ''; });
+  if (dropJ < grpItems.length) {
+    grpItems[dropJ].style.borderTop = '2px solid var(--primary)';
+  } else if (grpItems.length > 0) {
+    grpItems[grpItems.length-1].style.borderBottom = '2px solid var(--primary)';
   }
 }
 function recDragEnd() {
   if (!recDrag) return;
   document.removeEventListener('touchmove', recDragMove);
   document.removeEventListener('touchend', recDragEnd);
-  const { srcIdx, dropIdx, clone, origEl } = recDrag;
+  const { srcIdx, srcGroup, dropJ, clone, origEl } = recDrag;
   recDrag = null;
   clone.remove();
   origEl.classList.remove('rec-dragging');
   document.querySelectorAll('#rec-list .rec-item').forEach(item => {
     item.style.borderTop = ''; item.style.borderBottom = '';
   });
-  // convert insert-before index to actual array insert position
-  let insertAt = dropIdx > srcIdx ? dropIdx - 1 : dropIdx;
-  if (insertAt !== srcIdx) {
+  if (dropJ !== null) {
     const recs = D.settings.recurring;
-    const [removed] = recs.splice(srcIdx, 1);
-    recs.splice(insertAt, 0, removed);
-    save();
+    // 同グループの配列インデックス一覧（元の順）
+    const grpIndices = recs.map((r,i)=>i).filter(i => (recs[i].group||'')===(srcGroup===REC_GROUP_NONE?'':srcGroup) || (!recs[i].group && srcGroup===REC_GROUP_NONE));
+    const srcJ = grpIndices.indexOf(srcIdx);
+    let insertJ = dropJ > srcJ ? dropJ - 1 : dropJ;
+    if (insertJ !== srcJ) {
+      const [removed] = recs.splice(srcIdx, 1);
+      // 削除後に同グループインデックスを再計算
+      const newGrpIndices = recs.map((r,i)=>i).filter(i => (recs[i].group||'')===(srcGroup===REC_GROUP_NONE?'':srcGroup) || (!recs[i].group && srcGroup===REC_GROUP_NONE));
+      const absInsert = insertJ < newGrpIndices.length ? newGrpIndices[insertJ] : (newGrpIndices.length > 0 ? newGrpIndices[newGrpIndices.length-1]+1 : recs.length);
+      recs.splice(absInsert, 0, removed);
+      save();
+    }
   }
   renderRecList();
 }
@@ -2618,6 +2910,7 @@ function openRecModal(id) {
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.day;
     document.getElementById('rec-pay').value = r.payType||'';
+    document.getElementById('rec-group').value = r.group||'';
     document.getElementById('rec-no-cc').checked = !!r.noCc;
     selRecSatVal = r.sat||'○';
     document.getElementById('rec-del-btn').style.display = '';
@@ -2628,6 +2921,7 @@ function openRecModal(id) {
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = '';
     document.getElementById('rec-pay').value = '';
+    document.getElementById('rec-group').value = '';
     document.getElementById('rec-no-cc').checked = false;
     selRecSatVal = '○';
     document.getElementById('rec-del-btn').style.display = 'none';
@@ -2646,11 +2940,12 @@ function saveRec() {
   const name = document.getElementById('rec-name').value.trim();
   const amount = parseFloat(document.getElementById('rec-amount').value)||0;
   const day = parseInt(document.getElementById('rec-day').value)||0;
-  if (!name || amount <= 0 || day < 1 || day > 31) { alert('費目・金額・日付を正しく入力してください'); return; }
+  if (!name || amount < 0 || day < 1 || day > 31) { alert('費目・金額・日付を正しく入力してください'); return; }
   const rec = {
     name, amount, day,
     category: document.getElementById('rec-category').value||'',
     payType: document.getElementById('rec-pay').value,
+    group: document.getElementById('rec-group').value||'',
     noCc: document.getElementById('rec-no-cc').checked,
     sat: selRecSatVal,
     active: true
@@ -2855,6 +3150,9 @@ dz.addEventListener('drop', e => {
 // ═══════════════════════════════════════════════════
 //  OVERLAY CLOSE ON BG CLICK
 // ═══════════════════════════════════════════════════
+document.getElementById('rec-inc-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('rec-inc-modal')) closeRecIncModal();
+});
 document.getElementById('rec-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('rec-modal')) closeRecModal();
 });
@@ -2870,6 +3168,7 @@ document.getElementById('income-modal').addEventListener('click', e => {
 // ═══════════════════════════════════════════════════
 initExpenseCats();
 generateRecurring(curMonth);
+generateRecurringIncome(curMonth);
 renderSummary();
 </script>
 </body>
