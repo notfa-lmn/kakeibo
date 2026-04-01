@@ -426,6 +426,11 @@
     <div class="bank-card-label">楽天銀行残高（理論値）</div>
     <div class="bank-card-value" id="bank-val">¥0</div>
     <div class="bank-card-detail" id="bank-detail"></div>
+    <div class="credit-row">
+      <span class="credit-label">前月クレジット支払額</span>
+      <input class="credit-input" type="number" id="prev-credit-input"
+             placeholder="0" onchange="savePrevCredit(this.value)">
+    </div>
   </div>
 
   <!-- Totals row -->
@@ -921,9 +926,11 @@ function budgetBalance(mk, cat) {
 }
 
 function bankBalance(mk) {
+  const md = mdata(mk);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
-  const transferSum = (mdata(mk).expenses||[]).reduce((s,e) => s + (e.transferAmt||0), 0);
-  return budgetSum + transferSum;
+  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e) => s + (e.transferAmt||0), 0);
+  const prevCredit = md.prevCredit || 0;
+  return budgetSum + transferSum + prevCredit;
 }
 
 function totalExpenses(mk) {
@@ -1029,12 +1036,15 @@ function renderSummary() {
 }
 
 function refreshBankDisplay() {
+  const md = mdata(curMonth);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
-  const transferSum = (mdata(curMonth).expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
-  const total = budgetSum + transferSum;
+  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
+  const prevCredit = md.prevCredit || 0;
+  const total = budgetSum + transferSum + prevCredit;
   document.getElementById('bank-val').textContent = yenSigned(total);
   document.getElementById('bank-detail').textContent =
-    `予算残高合計: ${yenSigned(budgetSum)}　振込金額合計: ${yen(transferSum)}`;
+    `予算残高: ${yenSigned(budgetSum)}　銀行振込: ${yen(transferSum)}　前月CC: ${yenSigned(prevCredit)}`;
+  document.getElementById('prev-credit-input').value = prevCredit || '';
 }
 
 // ═══════════════════════════════════════════════════
@@ -1110,6 +1120,13 @@ function renderSettings() {
     </div>`).join('');
   // recurring
   renderRecList();
+}
+
+function savePrevCredit(val) {
+  const md = mdata(curMonth);
+  md.prevCredit = parseFloat(val)||0;
+  save();
+  refreshBankDisplay();
 }
 
 function saveBudget(cat, val) {
