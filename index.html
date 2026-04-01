@@ -334,6 +334,39 @@
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
     .spacer { height: 16px; }
 
+    /* ── FAB MENU ── */
+    .fab-menu {
+      display: none; position: absolute;
+      bottom: 64px; left: 50%; transform: translateX(-50%);
+      background: var(--card); border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+      overflow: hidden; min-width: 160px; z-index: 300;
+    }
+    .fab-menu.open { display: block; }
+    .fab-menu-btn {
+      display: block; width: 100%; padding: 14px 18px;
+      border: none; background: none; text-align: left;
+      font-size: 15px; font-weight: 500; cursor: pointer;
+      font-family: inherit; border-bottom: 0.5px solid var(--sep);
+    }
+    .fab-menu-btn:last-child { border-bottom: none; }
+    .fab-menu-btn:active { background: var(--fill); }
+
+    /* ── INCOME LIST ── */
+    .income-row {
+      background: rgba(52,199,89,0.06); border-radius: 10px;
+      padding: 11px 13px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      border-left: 3px solid var(--success);
+    }
+    .income-row:active { opacity: 0.7; }
+    .inc-icon { font-size: 18px; width: 26px; text-align: center; flex-shrink: 0; }
+    .inc-info { flex: 1; min-width: 0; }
+    .inc-name { font-size: 14px; font-weight: 500; }
+    .inc-meta { font-size: 11px; color: var(--sub); margin-top: 2px; }
+    .inc-amount { font-size: 14px; font-weight: 600; color: var(--success); text-align: right; }
+
     /* ── AUTH ── */
     .auth-btn {
       background: none; border: none; cursor: pointer;
@@ -428,8 +461,10 @@
     <div class="bank-card-detail" id="bank-detail"></div>
     <div class="credit-row">
       <span class="credit-label">前月クレジット支払額</span>
-      <input class="credit-input" type="number" id="prev-credit-input"
-             placeholder="0" onchange="savePrevCredit(this.value)">
+      <input class="credit-input" type="text" inputmode="numeric" id="prev-credit-input"
+             placeholder="¥0"
+             onfocus="unfmtInput(this)"
+             onblur="fmtInput(this);savePrevCredit(this.value)">
     </div>
   </div>
 
@@ -442,6 +477,17 @@
     <div class="card" style="margin:0;">
       <div class="card-label">クレジット支払計</div>
       <div class="card-value" id="credit-total-val" style="font-size:20px;">¥0</div>
+    </div>
+  </div>
+  <!-- Income row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 16px 0;">
+    <div class="card" style="margin:0;">
+      <div class="card-label">今月の収入計（予算内）</div>
+      <div class="card-value" id="income-budget-val" style="font-size:20px;color:var(--success);">¥0</div>
+    </div>
+    <div class="card" style="margin:0;">
+      <div class="card-label">収入計（予算外）</div>
+      <div class="card-value" id="income-extra-val" style="font-size:20px;color:var(--success);">¥0</div>
     </div>
   </div>
 
@@ -489,11 +535,26 @@
       </div>
       <div class="fg">
         <label>敵種別</label>
-        <select class="fs" id="f-teki">
+        <select class="fs" id="f-teki" onchange="onTekiChange()">
           <option value="敵１">敵１（固定月次）</option>
           <option value="敵２" selected>敵２（変動月次）</option>
           <option value="敵３">敵３（固定不定期）</option>
           <option value="敵４">敵４（変動不定期）</option>
+        </select>
+      </div>
+    </div>
+    <!-- Category / Subcategory -->
+    <div class="form-row">
+      <div class="fg" id="fg-category">
+        <label>大カテゴリ</label>
+        <select class="fs" id="f-category" onchange="onCategoryChange()">
+          <option value="">選択</option>
+        </select>
+      </div>
+      <div class="fg" id="fg-subcategory" style="display:none;">
+        <label>小カテゴリ</label>
+        <select class="fs" id="f-subcategory">
+          <option value="">選択</option>
         </select>
       </div>
     </div>
@@ -594,9 +655,13 @@
 <!-- ═══════════════════════════════════ SETTINGS -->
 <div id="scr-settings" class="screen">
   <div class="settings-wrap">
+    <!-- Carryover budgets -->
+    <div class="section-title" style="padding-left:0;">積立予算（毎月積立・繰越あり）</div>
+    <div class="set-card" id="budget-settings-carryover"></div>
+    <div class="set-note" style="padding:4px 0 8px;color:var(--sub);font-size:11px;">※前月の残高が翌月に繰り越されます</div>
     <!-- Monthly budgets -->
-    <div class="section-title" style="padding-left:0;">月次予算（毎月の予算額）</div>
-    <div class="set-card" id="budget-settings"></div>
+    <div class="section-title" style="padding-left:0;">月次予算（毎月リセット）</div>
+    <div class="set-card" id="budget-settings-monthly"></div>
 
     <!-- Month adjustments -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
@@ -647,8 +712,12 @@
     <span class="nav-icon">📋</span>
     <span class="nav-label">支出一覧</span>
   </button>
-  <div class="fab-wrap">
-    <button class="fab" onclick="switchScreen('add')" id="nav-add" title="支出を追加">＋</button>
+  <div class="fab-wrap" style="position:relative;">
+    <button class="fab" onclick="toggleFabMenu()" id="nav-add" title="追加">＋</button>
+    <div class="fab-menu" id="fab-menu">
+      <button class="fab-menu-btn" onclick="closeFabMenu();switchScreen('add')">💸 支出を追加</button>
+      <button class="fab-menu-btn" onclick="closeFabMenu();openIncomeModal()">💰 収入を追加</button>
+    </div>
   </div>
   <button class="nav-btn" id="nav-settings" onclick="switchScreen('settings')">
     <span class="nav-icon">⚙️</span>
@@ -705,6 +774,56 @@
       </div>
       <button class="btn btn-p" onclick="saveRec()">保存する</button>
       <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ INCOME MODAL -->
+<div class="overlay" id="income-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="income-modal-title">収入を追加</span>
+      <button class="sheet-close" onclick="closeIncomeModal()">✕</button>
+    </div>
+    <div class="form-wrap" style="padding-top:0;">
+      <div class="fg">
+        <label>日付</label>
+        <input class="fi" type="date" id="inc-date">
+      </div>
+      <div class="form-row">
+        <div class="fg">
+          <label>収入カテゴリ</label>
+          <select class="fs" id="inc-category" onchange="onIncomeCatChange()">
+            <option value="">選択</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>内訳</label>
+          <select class="fs" id="inc-subcategory">
+            <option value="">選択</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="fg">
+          <label>金額（円）</label>
+          <input class="fi" type="number" id="inc-amount" placeholder="0">
+        </div>
+        <div class="fg">
+          <label>予算区分</label>
+          <select class="fs" id="inc-budget-type">
+            <option value="予算内">予算内</option>
+            <option value="予算外">予算外</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
+        <label>メモ（任意）</label>
+        <input class="fi" type="text" id="inc-memo" placeholder="備考など">
+      </div>
+      <button class="btn btn-p" style="background:#34c759;" onclick="submitIncome()">収入を記録</button>
+      <button class="btn btn-d" id="inc-del-btn" style="display:none;" onclick="deleteIncome()">削除する</button>
     </div>
   </div>
 </div>
@@ -829,7 +948,34 @@ function updateAuthUI() {
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
 const CATS = ['特別費','配当金','敵３','食料品','お小遣い','日用品','投資待機資金'];
+const CARRYOVER_CATS = new Set(['特別費','配当金','敵３','投資待機資金']);
 const STORAGE_KEY = 'kakeibo_v2';
+
+// 支出サブカテゴリ定義
+// _items: 大カテゴリ直接選択（小カテゴリなし）
+// named keys: 大カテゴリ → 小カテゴリ配列
+const EXPENSE_CATS = {
+  '敵１': { _items: ['住宅','マネーフォワード確定申告','iCloud','携帯代','Wi-Fi','電気代','ガス代','水道代','Noa','リベシティ','YouTube Premium','その他'] },
+  '敵２': {
+    '食費':       ['食料品','外食','その他食費'],
+    '日用品':     ['日用品','美容院','病院','美容','サウナ','カフェ','ジム','整体','タクシー','その他'],
+    '趣味・娯楽': ['漫画','トレカ','ギター','その他'],
+    '交際費':     ['交際費','その他交際費'],
+    '教養・教育': ['その他'],
+    '交通費':     ['その他']
+  },
+  '敵３': { _items: ['1password','マネーフォワード確定申告','スマクリ','賃貸更新料','賃貸保証会社更新料','Microsoft','美容皮膚科','脱毛','Amex年会費','JCB年会費','楽天カード年会費','その他'] },
+  '敵４': { _items: ['PC','家具・家電','結婚式','プレゼント','お金の勉強フェス','旅行','洋服','洋服（浪費）','ディズニー','その他'] }
+};
+
+// 収入カテゴリ定義
+const INCOME_CATS = {
+  '給与':       ['給与','ボーナス','その他'],
+  '事業所得':   ['事業所得（SE）','事業所得（ライブ配信）','その他'],
+  '配当金':     ['日本株','米国株','米国債','利息','その他'],
+  '税調整':     ['税調整'],
+  'その他入金': ['その他入金']
+};
 
 // ═══════════════════════════════════════════════════
 //  STATE
@@ -866,8 +1012,9 @@ function save() {
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], recDone:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], recDone:false };
   if (!D.months[key].adj) D.months[key].adj = {};
+  if (!D.months[key].incomes) D.months[key].incomes = [];
   return D.months[key];
 }
 
@@ -898,6 +1045,9 @@ function nextMk(k) {
 }
 function yen(n) { return '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
 function yenSigned(n) { return (n < 0 ? '-¥' : '¥') + Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
+function parseYen(s) { return parseFloat(String(s).replace(/[¥,￥]/g,''))||0; }
+function fmtInput(el) { const n=parseYen(el.value); el.value = n ? '¥'+Math.round(n).toLocaleString('ja-JP') : ''; }
+function unfmtInput(el) { const n=parseYen(el.value); el.value = n || ''; }
 function roundUp500(n) { return n <= 0 ? 0 : Math.ceil(n / 500) * 500; }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -909,7 +1059,6 @@ function budgetBalance(mk, cat) {
   const md = mdata(mk);
   const base = D.settings.budgets[cat] || 0;
   const manAdj = (md.adj[cat] || 0);
-  // auto: deduct previous month's nextMonth amounts for this category
   const prevKey = prevMk(mk);
   const prevMd = D.months[prevKey];
   let autoAdj = 0;
@@ -918,7 +1067,11 @@ function budgetBalance(mk, cat) {
       .filter(e => e.nmType === cat)
       .reduce((s,e) => s + (e.nmAmt||0), 0);
   }
-  const total = base + manAdj - autoAdj;
+  let total = base + manAdj - autoAdj;
+  // 積立予算：前月残高を繰り越す（前月データが存在する場合のみ）
+  if (CARRYOVER_CATS.has(cat) && D.months[prevKey]) {
+    total += budgetBalance(prevKey, cat);
+  }
   const spent = (md.expenses||[])
     .filter(e => e.payType === cat)
     .reduce((s,e) => s + (e.amount||0), 0);
@@ -975,6 +1128,158 @@ function generateRecurring(mk) {
 }
 
 // ═══════════════════════════════════════════════════
+//  FAB MENU
+// ═══════════════════════════════════════════════════
+function toggleFabMenu() {
+  const m = document.getElementById('fab-menu');
+  m.classList.toggle('open');
+}
+function closeFabMenu() {
+  document.getElementById('fab-menu').classList.remove('open');
+}
+document.addEventListener('click', e => {
+  const fab = document.getElementById('nav-add');
+  const menu = document.getElementById('fab-menu');
+  if (fab && menu && !fab.contains(e.target) && !menu.contains(e.target)) {
+    menu.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════════════
+//  EXPENSE CATEGORY CASCADE
+// ═══════════════════════════════════════════════════
+function onTekiChange() {
+  const teki = document.getElementById('f-teki').value;
+  const catData = EXPENSE_CATS[teki];
+  const catSel = document.getElementById('f-category');
+  const subSel = document.getElementById('f-subcategory');
+  const subFg  = document.getElementById('fg-subcategory');
+  catSel.innerHTML = '<option value="">選択</option>';
+  subSel.innerHTML = '<option value="">選択</option>';
+  subFg.style.display = 'none';
+  if (!catData) return;
+  if (catData._items) {
+    catData._items.forEach(item => {
+      catSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
+    });
+  } else {
+    Object.keys(catData).forEach(cat => {
+      catSel.innerHTML += `<option value="${esc(cat)}">${esc(cat)}</option>`;
+    });
+  }
+}
+
+function onCategoryChange() {
+  const teki = document.getElementById('f-teki').value;
+  const cat  = document.getElementById('f-category').value;
+  const catData = EXPENSE_CATS[teki];
+  const subSel = document.getElementById('f-subcategory');
+  const subFg  = document.getElementById('fg-subcategory');
+  subSel.innerHTML = '<option value="">選択</option>';
+  subFg.style.display = 'none';
+  if (!catData || catData._items || !cat || !catData[cat]) return;
+  subFg.style.display = '';
+  catData[cat].forEach(item => {
+    subSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
+  });
+  // 名前フィールドを自動入力（空の場合のみ）
+  const nameEl = document.getElementById('f-name');
+  if (!nameEl.value) nameEl.value = cat;
+}
+
+// ═══════════════════════════════════════════════════
+//  INCOME
+// ═══════════════════════════════════════════════════
+let editIncomeId = null;
+
+function openIncomeModal(id) {
+  editIncomeId = id || null;
+  const catSel = document.getElementById('inc-category');
+  catSel.innerHTML = '<option value="">選択</option>';
+  Object.keys(INCOME_CATS).forEach(c => {
+    catSel.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`;
+  });
+  document.getElementById('inc-subcategory').innerHTML = '<option value="">選択</option>';
+  document.getElementById('inc-del-btn').style.display = 'none';
+
+  if (id) {
+    const inc = (mdata(curMonth).incomes||[]).find(x => x.id === id);
+    if (!inc) return;
+    document.getElementById('income-modal-title').textContent = '収入を編集';
+    document.getElementById('inc-date').value = inc.date;
+    catSel.value = inc.category;
+    onIncomeCatChange();
+    document.getElementById('inc-subcategory').value = inc.subcategory||'';
+    document.getElementById('inc-amount').value = inc.amount;
+    document.getElementById('inc-budget-type').value = inc.budgetType||'予算内';
+    document.getElementById('inc-memo').value = inc.memo||'';
+    document.getElementById('inc-del-btn').style.display = '';
+  } else {
+    document.getElementById('income-modal-title').textContent = '収入を追加';
+    document.getElementById('inc-date').value = todayStr();
+    document.getElementById('inc-amount').value = '';
+    document.getElementById('inc-budget-type').value = '予算内';
+    document.getElementById('inc-memo').value = '';
+  }
+  document.getElementById('income-modal').classList.add('open');
+}
+
+function closeIncomeModal() {
+  document.getElementById('income-modal').classList.remove('open');
+}
+
+function onIncomeCatChange() {
+  const cat = document.getElementById('inc-category').value;
+  const subSel = document.getElementById('inc-subcategory');
+  subSel.innerHTML = '<option value="">選択</option>';
+  if (!cat || !INCOME_CATS[cat]) return;
+  INCOME_CATS[cat].forEach(item => {
+    subSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
+  });
+}
+
+function submitIncome() {
+  const date     = document.getElementById('inc-date').value;
+  const category = document.getElementById('inc-category').value;
+  const subcat   = document.getElementById('inc-subcategory').value;
+  const amount   = parseFloat(document.getElementById('inc-amount').value)||0;
+  if (!date || !category || amount <= 0) { alert('日付・カテゴリ・金額を入力してください'); return; }
+  const mk  = date.slice(0,7);
+  const md  = mdata(mk);
+  const obj = {
+    date, category, subcategory: subcat,
+    amount, budgetType: document.getElementById('inc-budget-type').value,
+    memo: document.getElementById('inc-memo').value.trim()
+  };
+  if (editIncomeId) {
+    const idx = md.incomes.findIndex(x => x.id === editIncomeId);
+    if (idx !== -1) md.incomes[idx] = { ...md.incomes[idx], ...obj };
+  } else {
+    md.incomes.push({ id: uid(), ...obj });
+  }
+  save();
+  closeIncomeModal();
+  curMonth = mk;
+  renderScreen();
+}
+
+function deleteIncome() {
+  if (!editIncomeId || !confirm('この収入を削除しますか？')) return;
+  const md = mdata(curMonth);
+  md.incomes = md.incomes.filter(x => x.id !== editIncomeId);
+  save();
+  closeIncomeModal();
+  renderScreen();
+}
+
+function totalIncome(mk, budgetType) {
+  const incomes = mdata(mk).incomes||[];
+  return budgetType
+    ? incomes.filter(x => x.budgetType === budgetType).reduce((s,x) => s+x.amount, 0)
+    : incomes.reduce((s,x) => s+x.amount, 0);
+}
+
+// ═══════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════
 function navMonth(dir) {
@@ -1016,6 +1321,8 @@ function renderSummary() {
   refreshBankDisplay();
   document.getElementById('total-val').textContent = yen(totalExpenses(curMonth));
   document.getElementById('credit-total-val').textContent = yen(creditTotal(curMonth));
+  document.getElementById('income-budget-val').textContent = yen(totalIncome(curMonth,'予算内'));
+  document.getElementById('income-extra-val').textContent = yen(totalIncome(curMonth,'予算外'));
   const grid = document.getElementById('budget-grid');
   grid.innerHTML = '';
   CATS.forEach(cat => {
@@ -1024,13 +1331,14 @@ function renderSummary() {
     const pct = base > 0 ? Math.max(0, Math.min(100, bal/base*100)) : 0;
     const cls = bal < 0 ? 'bad' : bal < base*0.2 ? 'warn' : 'ok';
     const bcls = bal < 0 ? 'bar-bad' : bal < base*0.2 ? 'bar-warn' : 'bar-ok';
+    const isCarryover = CARRYOVER_CATS.has(cat);
     const cell = document.createElement('div');
     cell.className = 'budget-cell';
     cell.innerHTML = `
-      <div class="bc-name">${esc(cat)}</div>
+      <div class="bc-name">${esc(cat)}${isCarryover ? ' <span style="font-size:9px;background:rgba(0,122,255,0.12);color:var(--primary);padding:1px 4px;border-radius:3px;">積立</span>' : ''}</div>
       <div class="bc-balance ${cls}">${bal<0?'-':''}${yen(bal)}</div>
       <div class="bc-bar-wrap"><div class="bc-bar ${bcls}" style="width:${pct}%"></div></div>
-      <div class="bc-detail">予算: ${yen(base)}</div>`;
+      <div class="bc-detail">${isCarryover ? '月次積立' : '予算'}: ${yen(base)}</div>`;
     grid.appendChild(cell);
   });
 }
@@ -1044,7 +1352,10 @@ function refreshBankDisplay() {
   document.getElementById('bank-val').textContent = yenSigned(total);
   document.getElementById('bank-detail').textContent =
     `予算残高: ${yenSigned(budgetSum)}　銀行振込: ${yen(transferSum)}　前月CC: ${yenSigned(prevCredit)}`;
-  document.getElementById('prev-credit-input').value = prevCredit || '';
+  const pcEl = document.getElementById('prev-credit-input');
+  if (document.activeElement !== pcEl) {
+    pcEl.value = prevCredit ? '¥' + Math.abs(Math.round(prevCredit)).toLocaleString('ja-JP') : '';
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -1053,46 +1364,68 @@ function refreshBankDisplay() {
 function renderList() {
   document.getElementById('list-month').textContent = monthLabel(curMonth);
   const md = mdata(curMonth);
-  const exps = [...(md.expenses||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  // 支出・収入を日付でマージ
+  const items = [
+    ...(md.expenses||[]).map(e => ({...e, _type:'expense'})),
+    ...(md.incomes||[]).map(i => ({...i, _type:'income'}))
+  ].sort((a,b) => a.date.localeCompare(b.date));
   const el = document.getElementById('expense-list');
-  if (!exps.length) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>支出データがありません</div></div>`;
+  if (!items.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
     return;
   }
   const byDate = {};
-  exps.forEach(e => { (byDate[e.date] = byDate[e.date]||[]).push(e); });
+  items.forEach(x => { (byDate[x.date] = byDate[x.date]||[]).push(x); });
   let html = '';
   Object.keys(byDate).sort().forEach(date => {
     const [,, day] = date.split('-');
     const wd = ['日','月','火','水','木','金','土'][new Date(date).getDay()];
     html += `<div class="date-header">${parseInt(day)}日（${wd}）</div>`;
-    byDate[date].forEach(e => {
-      const tc = `t${(e.teki||'敵２').replace('敵','')}`;
-      const autoBadge = e.auto ? `<span class="auto-badge">自動</span>` : '';
-      const noCcBadge = e.noCc ? `<span class="tbadge" style="background:#f0f0f5;color:#636366;">🏦銀行引落</span>` : '';
-      const payLabel = e.payType ? `💰 ${e.payType}` : '💳 銀行振込';
-      const nmBadge = e.nmType ? `<span class="nm-badge">次月:${e.nmType} ${yen(e.nmAmt||0)}</span>` : '';
-      const budgetAllocVal = e.budgetAlloc || e.transfer || 0;
-      const transferLine = e.transferAmt
-        ? `支払元: ${yen(budgetAllocVal)}　振込: ${yen(e.transferAmt)}`
-        : `支払元: ${yen(budgetAllocVal)}`;
-      html += `
-        <div class="expense-row" onclick="openEdit('${e.id}')">
-          <div class="exp-sat">${e.sat||'○'}</div>
-          <div class="exp-info">
-            <div class="exp-name">${autoBadge} ${esc(e.name)}</div>
-            <div class="exp-meta">
-              ${payLabel}
-              <span class="tbadge ${tc}">${e.teki||'敵２'}</span>
-              ${noCcBadge}
-              ${nmBadge}
+    byDate[date].forEach(x => {
+      if (x._type === 'income') {
+        const sub = x.subcategory ? ` / ${esc(x.subcategory)}` : '';
+        const bt = x.budgetType === '予算外' ? `<span class="tbadge" style="background:rgba(255,149,0,0.15);color:var(--warning);">予算外</span>` : `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);">予算内</span>`;
+        html += `
+          <div class="income-row" onclick="openIncomeModal('${x.id}')">
+            <div class="inc-icon">💰</div>
+            <div class="inc-info">
+              <div class="inc-name">${esc(x.category)}${sub}</div>
+              <div class="inc-meta">${bt}${x.memo ? ` ${esc(x.memo)}` : ''}</div>
             </div>
-          </div>
-          <div class="exp-amounts">
-            <div class="exp-amount">${yen(e.amount)}</div>
-            <div class="exp-transfer">${transferLine}</div>
-          </div>
-        </div>`;
+            <div class="inc-amount">+${yen(x.amount)}</div>
+          </div>`;
+      } else {
+        const e = x;
+        const tc = `t${(e.teki||'敵２').replace('敵','')}`;
+        const autoBadge = e.auto ? `<span class="auto-badge">自動</span>` : '';
+        const noCcBadge = e.noCc ? `<span class="tbadge" style="background:#f0f0f5;color:#636366;">🏦銀行引落</span>` : '';
+        const payLabel = e.payType ? `💰 ${e.payType}` : '💳 銀行振込';
+        const nmBadge = e.nmType ? `<span class="nm-badge">次月:${e.nmType} ${yen(e.nmAmt||0)}</span>` : '';
+        const catLabel = e.category ? (e.subcategory ? `${esc(e.category)}›${esc(e.subcategory)}` : esc(e.category)) : '';
+        const catBadge = catLabel ? `<span class="tbadge" style="background:var(--fill);color:var(--sub);">${catLabel}</span>` : '';
+        const budgetAllocVal = e.budgetAlloc || e.transfer || 0;
+        const transferLine = e.transferAmt
+          ? `支払元: ${yen(budgetAllocVal)}　振込: ${yen(e.transferAmt)}`
+          : `支払元: ${yen(budgetAllocVal)}`;
+        html += `
+          <div class="expense-row" onclick="openEdit('${e.id}')">
+            <div class="exp-sat">${e.sat||'○'}</div>
+            <div class="exp-info">
+              <div class="exp-name">${autoBadge} ${esc(e.name)}</div>
+              <div class="exp-meta">
+                ${payLabel}
+                <span class="tbadge ${tc}">${e.teki||'敵２'}</span>
+                ${catBadge}
+                ${noCcBadge}
+                ${nmBadge}
+              </div>
+            </div>
+            <div class="exp-amounts">
+              <div class="exp-amount">${yen(e.amount)}</div>
+              <div class="exp-transfer">${transferLine}</div>
+            </div>
+          </div>`;
+      }
     });
   });
   el.innerHTML = html;
@@ -1104,19 +1437,28 @@ function renderList() {
 function renderSettings() {
   document.getElementById('settings-month-label').textContent = monthLabel(curMonth);
   // budgets
-  document.getElementById('budget-settings').innerHTML = CATS.map(cat => `
+  const carryoverCats = ['特別費','配当金','敵３','投資待機資金'];
+  const monthlyCats   = ['食料品','お小遣い','日用品'];
+  const fmtVal = n => (n ? '¥' + Math.round(n).toLocaleString('ja-JP') : '');
+  const budgetRow = cat => `
     <div class="set-row">
       <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="number" value="${D.settings.budgets[cat]||0}"
-             onchange="saveBudget('${cat}',this.value)">
-    </div>`).join('');
+      <input class="set-input" type="text" inputmode="numeric"
+             value="${fmtVal(D.settings.budgets[cat]||0)}"
+             onfocus="unfmtInput(this)"
+             onblur="fmtInput(this);saveBudget('${cat}',this.value)">
+    </div>`;
+  document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(budgetRow).join('');
+  document.getElementById('budget-settings-monthly').innerHTML   = monthlyCats.map(budgetRow).join('');
   // adjustments
   const md = mdata(curMonth);
   document.getElementById('adj-settings').innerHTML = CATS.map(cat => `
     <div class="set-row">
       <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="number" value="${(md.adj||{})[cat]||0}"
-             onchange="saveAdj('${cat}',this.value)">
+      <input class="set-input" type="text" inputmode="numeric"
+             value="${fmtVal((md.adj||{})[cat]||0)}"
+             onfocus="unfmtInput(this)"
+             onblur="fmtInput(this);saveAdj('${cat}',this.value)">
     </div>`).join('');
   // recurring
   renderRecList();
@@ -1124,19 +1466,19 @@ function renderSettings() {
 
 function savePrevCredit(val) {
   const md = mdata(curMonth);
-  md.prevCredit = parseFloat(val)||0;
+  md.prevCredit = parseYen(val);
   save();
   refreshBankDisplay();
 }
 
 function saveBudget(cat, val) {
-  D.settings.budgets[cat] = parseFloat(val)||0;
+  D.settings.budgets[cat] = parseYen(val);
   save();
 }
 function saveAdj(cat, val) {
   const md = mdata(curMonth);
   if (!md.adj) md.adj = {};
-  md.adj[cat] = parseFloat(val)||0;
+  md.adj[cat] = parseYen(val);
   save();
 }
 
@@ -1185,6 +1527,11 @@ function resetForm() {
   document.getElementById('submit-btn').textContent = '支出を記録';
   document.getElementById('cancel-btn').style.display = 'none';
   document.getElementById('delete-btn').style.display = 'none';
+  // カテゴリリセット
+  document.getElementById('f-category').innerHTML = '<option value="">選択</option>';
+  document.getElementById('f-subcategory').innerHTML = '<option value="">選択</option>';
+  document.getElementById('fg-subcategory').style.display = 'none';
+  onTekiChange();
 }
 
 function openEdit(id) {
@@ -1196,6 +1543,12 @@ function openEdit(id) {
   document.getElementById('f-name').value = e.name;
   document.getElementById('f-amount').value = e.amount;
   document.getElementById('f-teki').value = e.teki||'敵２';
+  onTekiChange();
+  if (e.category) {
+    document.getElementById('f-category').value = e.category;
+    onCategoryChange();
+    if (e.subcategory) document.getElementById('f-subcategory').value = e.subcategory;
+  }
   document.getElementById('f-pay').value = e.payType||'';
   document.getElementById('transfer-disp').textContent = yen(e.budgetAlloc || e.transfer || 0);
   document.getElementById('f-transfer-amt').value = e.transferAmt||'';
@@ -1241,6 +1594,8 @@ function submitExpense() {
   const expObj = {
     date, name, amount,
     teki: document.getElementById('f-teki').value,
+    category: document.getElementById('f-category').value||'',
+    subcategory: document.getElementById('f-subcategory').value||'',
     payType: document.getElementById('f-pay').value,
     sat: selSatVal,
     budgetAlloc: roundUp500(amount),
@@ -1501,6 +1856,10 @@ function saveRec() {
   } else {
     D.settings.recurring.push({ id: uid(), ...rec });
   }
+  // 新規追加・編集後は今月の自動生成をリセットして再実行
+  mdata(curMonth).recDone = false;
+  save();
+  generateRecurring(curMonth);
   save();
   closeRecModal();
   renderRecList();
@@ -1659,6 +2018,9 @@ document.getElementById('rec-modal').addEventListener('click', e => {
 });
 document.getElementById('csv-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('csv-modal')) closeCsvModal();
+});
+document.getElementById('income-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('income-modal')) closeIncomeModal();
 });
 
 // ═══════════════════════════════════════════════════
