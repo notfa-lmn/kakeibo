@@ -415,6 +415,17 @@
       background: var(--fill); color: var(--sub);
     }
     .rec-apply-btn:active { opacity: 0.75; }
+    /* detail modal */
+    .detail-block { background:var(--card); border-radius:12px; padding:14px; margin-bottom:12px; }
+    .detail-block-title { font-size:11px; font-weight:600; color:var(--sub); margin-bottom:10px; letter-spacing:0.4px; }
+    .detail-budget-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; }
+    .detail-exp-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:0.5px solid var(--sep); }
+    .detail-exp-row:last-child { border-bottom:none; }
+    .detail-inc-row { display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:0.5px solid var(--sep); cursor:pointer; }
+    .detail-inc-row:last-child { border-bottom:none; }
+    .detail-inc-row:active { opacity:0.7; }
+    .tap-card { cursor:pointer; }
+    .tap-card:active { opacity:0.8; }
     .drag-handle {
       font-size: 18px; color: var(--sep); cursor: grab;
       padding: 4px 6px 4px 0; touch-action: none; user-select: none;
@@ -623,22 +634,22 @@
 
   <!-- Totals row -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 16px 0;">
-    <div class="card" style="margin:0;">
+    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
       <div class="card-label">今月の支出計</div>
       <div class="card-value" id="total-val" style="font-size:20px;">¥0</div>
     </div>
-    <div class="card" style="margin:0;">
+    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
       <div class="card-label">クレジット支払計</div>
       <div class="card-value" id="credit-total-val" style="font-size:20px;">¥0</div>
     </div>
   </div>
   <!-- Income row -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 16px 0;">
-    <div class="card" style="margin:0;">
+    <div class="card tap-card" style="margin:0;" onclick="openIncomeDetail('予算内')">
       <div class="card-label">今月の収入計（予算内）</div>
       <div class="card-value" id="income-budget-val" style="font-size:20px;color:var(--success);">¥0</div>
     </div>
-    <div class="card" style="margin:0;">
+    <div class="card tap-card" style="margin:0;" onclick="openIncomeDetail('予算外')">
       <div class="card-label">収入計（予算外）</div>
       <div class="card-value" id="income-extra-val" style="font-size:20px;color:var(--success);">¥0</div>
     </div>
@@ -719,19 +730,19 @@
       <label>支払種別（予算財布）</label>
       <select class="fs" id="f-pay" onchange="onAmountInput()">
         <option value="">― 種別なし（敵１ / 銀行振込）</option>
+        <option value="食料品">食料品</option>
+        <option value="日用品">日用品</option>
+        <option value="お小遣い">お小遣い</option>
         <option value="特別費">特別費</option>
         <option value="配当金">配当金</option>
         <option value="敵３">敵３</option>
-        <option value="食料品">食料品</option>
-        <option value="お小遣い">お小遣い</option>
-        <option value="日用品">日用品</option>
         <option value="投資待機資金">投資待機資金</option>
       </select>
     </div>
     <!-- 支払元予算 (auto) + 振込金額 (manual) -->
     <div class="form-row">
       <div class="fg">
-        <label>支払元予算（自動 / 手動上書き可）</label>
+        <label>支払元予算</label>
         <input class="fi" type="number" id="transfer-disp" placeholder="自動計算" style="font-weight:700;color:var(--primary);">
       </div>
       <div class="fg">
@@ -766,12 +777,12 @@
           <label>次月振込種別</label>
           <select class="fs" id="f-nm-type">
             <option value="">なし</option>
+            <option value="食料品">食料品</option>
+            <option value="日用品">日用品</option>
+            <option value="お小遣い">お小遣い</option>
             <option value="特別費">特別費</option>
             <option value="配当金">配当金</option>
             <option value="敵３">敵３</option>
-            <option value="食料品">食料品</option>
-            <option value="お小遣い">お小遣い</option>
-            <option value="日用品">日用品</option>
             <option value="投資待機資金">投資待機資金</option>
           </select>
         </div>
@@ -1044,6 +1055,18 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════ DETAIL MODAL -->
+<div class="overlay" id="detail-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="detail-modal-title"></span>
+      <button class="sheet-close" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div id="detail-modal-body" style="overflow-y:auto;max-height:65vh;padding:0 16px 24px;"></div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════ RECEIPT LOADING OVERLAY -->
 <div class="receipt-loading" id="receipt-loading">
   <div class="ocr-spinner"></div>
@@ -1250,11 +1273,16 @@ const DEFAULT_EXPENSE_CATS = {
 // D.settings.expenseCats を参照するアクセサ
 function getEC() { return D.settings.expenseCats || DEFAULT_EXPENSE_CATS; }
 // フラット敵 or 敵２の大カテゴリ一覧
+const TEKI2_CAT_ORDER = ['食費','日用品','趣味・娯楽','交際費','教養・教育','交通費'];
 function getECItems(teki) {
   const ec = getEC();
   const d = ec[teki];
   if (!d) return [];
-  return Array.isArray(d) ? d : Object.keys(d);
+  if (Array.isArray(d)) return d;
+  // 敵２は順序固定、未知のキーは末尾に追加
+  const known = TEKI2_CAT_ORDER.filter(k => k in d);
+  const extra = Object.keys(d).filter(k => !TEKI2_CAT_ORDER.includes(k));
+  return [...known, ...extra];
 }
 // 敵２の小カテゴリ
 function getECSubItems(largeCat) {
@@ -2014,7 +2042,8 @@ function renderSummary() {
     const bcls = bal < 0 ? 'bar-bad' : bal < base*0.2 ? 'bar-warn' : 'bar-ok';
     const isCarryover = CARRYOVER_CATS.has(cat);
     const cell = document.createElement('div');
-    cell.className = 'budget-cell';
+    cell.className = 'budget-cell tap-card';
+    cell.onclick = () => openBudgetDetail(cat);
     cell.innerHTML = `
       <div class="bc-name">${esc(cat)}${isCarryover ? ' <span style="font-size:9px;background:rgba(0,122,255,0.12);color:var(--primary);padding:1px 4px;border-radius:3px;">積立</span>' : ''}</div>
       <div class="bc-balance ${cls}">${bal<0?'-':''}${yen(bal)}</div>
@@ -2022,6 +2051,91 @@ function renderSummary() {
       <div class="bc-detail">${isCarryover ? '月次積立' : '予算'}: ${yen(base)}</div>`;
     grid.appendChild(cell);
   });
+}
+
+// ── detail modal ──
+function openDetailModal(title, bodyHtml) {
+  document.getElementById('detail-modal-title').textContent = title;
+  document.getElementById('detail-modal-body').innerHTML = bodyHtml;
+  document.getElementById('detail-modal').classList.add('open');
+}
+function closeDetailModal() {
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
+function openIncomeDetail(budgetType) {
+  const all = mdata(curMonth).incomes || [];
+  const list = all.filter(x => x.budgetType === budgetType).sort((a,b) => a.date.localeCompare(b.date));
+  const title = `収入一覧（${budgetType}）`;
+  if (!list.length) {
+    openDetailModal(title, `<div style="text-align:center;padding:32px;color:var(--sub);">収入の記録がありません</div>`);
+    return;
+  }
+  const total = list.reduce((s,x) => s + x.amount, 0);
+  let html = `<div style="text-align:right;font-size:13px;color:var(--sub);margin-bottom:12px;">合計: <strong style="color:var(--success);font-size:16px;">${yen(total)}</strong></div>`;
+  html += '<div class="detail-block">';
+  list.forEach(x => {
+    const sub = x.subcategory ? ` · ${esc(x.subcategory)}` : '';
+    const memo = x.memo ? ` · ${esc(x.memo)}` : '';
+    html += `<div class="detail-inc-row" onclick="closeDetailModal();openIncomeModal('${x.id}')">
+      <div>
+        <div style="font-size:14px;font-weight:500;">${esc(x.category)}${sub}</div>
+        <div style="font-size:12px;color:var(--sub);">${x.date}${memo}</div>
+      </div>
+      <div style="font-size:15px;font-weight:700;color:var(--success);">${yen(x.amount)}</div>
+    </div>`;
+  });
+  html += '</div>';
+  openDetailModal(title, html);
+}
+
+function openBudgetDetail(cat) {
+  const md = mdata(curMonth);
+  const base = D.settings.budgets[cat] || 0;
+  const adj  = (md.adj || {})[cat] || 0;
+  const bal  = displayBudgetBalance(curMonth, cat);
+  const isCarryover = CARRYOVER_CATS.has(cat);
+  const expenses = (md.expenses || [])
+    .filter(e => e.payType === cat)
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  const adjStr = adj !== 0
+    ? `　<span style="font-size:12px;color:${adj>0?'var(--success)':'var(--danger)'};">（当月調整 ${adj>0?'+':''}${yen(adj)}）</span>`
+    : '';
+  let html = `<div class="detail-block">
+    <div class="detail-block-title">予算</div>
+    <div class="detail-budget-row">
+      <span style="color:var(--sub);font-size:14px;">${isCarryover?'月次積立':'今月の予算'}${adjStr}</span>
+      <span style="font-weight:600;">${yen(base)}</span>
+    </div>
+    <div class="detail-budget-row" style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:10px;">
+      <span style="color:var(--sub);font-size:14px;">今月の予算残高</span>
+      <span style="font-size:18px;font-weight:700;color:${bal<0?'var(--danger)':bal<base*0.2?'var(--warning)':'var(--text)'};">${yen(bal)}</span>
+    </div>
+  </div>`;
+
+  html += `<div class="detail-block"><div class="detail-block-title">明細</div>`;
+  if (!expenses.length) {
+    html += `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">支出の記録がありません</div>`;
+  } else {
+    expenses.forEach(e => {
+      const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+      html += `<div class="detail-exp-row">
+        <div>
+          <div style="font-size:14px;font-weight:500;">${esc(e.name)}</div>
+          <div style="font-size:12px;color:var(--sub);">${e.date}</div>
+        </div>
+        <div style="font-size:15px;font-weight:600;">${yen(alloc)}</div>
+      </div>`;
+    });
+    const total = expenses.reduce((s,e) => s + (e.budgetAlloc!=null ? e.budgetAlloc : (e.amount||0)), 0);
+    html += `<div style="display:flex;justify-content:space-between;padding:10px 0 0;border-top:0.5px solid var(--sep);margin-top:4px;">
+      <span style="font-size:13px;color:var(--sub);">合計振込</span>
+      <span style="font-weight:700;font-size:15px;">${yen(total)}</span>
+    </div>`;
+  }
+  html += '</div>';
+  openDetailModal(`${cat} の明細`, html);
 }
 
 function refreshBankDisplay() {
@@ -3161,6 +3275,9 @@ document.getElementById('rec-inc-modal').addEventListener('click', e => {
 });
 document.getElementById('rec-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('rec-modal')) closeRecModal();
+});
+document.getElementById('detail-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('detail-modal')) closeDetailModal();
 });
 document.getElementById('csv-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('csv-modal')) closeCsvModal();
