@@ -4010,6 +4010,7 @@ function renderRecTeki3List() {
     const g = r.group && grouped[r.group] !== undefined ? r.group : REC_GROUP_NONE;
     grouped[g].push(r);
   });
+  groupOrder.forEach(g => grouped[g].sort((a, b) => (a.day||0) - (b.day||0)));
   const md = mdata(curMonth);
   const intLabels = {'1':'毎月','2':'隔月','3':'3ヶ月毎','6':'半年毎','12':'年1回','24':'2年に1回'};
   let html = '';
@@ -4299,6 +4300,7 @@ function renderRecAnlSubList(elId, filterFn, grpPrefix, toggleFn) {
     if (r.type === 'income') { anlGrouped['収入'].push(r); }
     else { const g = r.group && anlGrouped[r.group] !== undefined ? r.group : REC_GROUP_NONE; anlGrouped[g].push(r); }
   });
+  anlGroupOrder.forEach(g => anlGrouped[g].sort((a, b) => (a.day||0) - (b.day||0)));
   let html = ''; let isFirst = true;
   anlGroupOrder.forEach(grpName => {
     const items = anlGrouped[grpName];
@@ -4510,6 +4512,7 @@ function renderRecList() {
     const g = r.group && grouped[r.group] !== undefined ? r.group : REC_GROUP_NONE;
     grouped[g].push({ r, idx });
   });
+  groupOrder.forEach(g => grouped[g].sort((a, b) => (a.r.day||0) - (b.r.day||0)));
   const md = mdata(curMonth);
   let html = '';
   let isFirst = true;
