@@ -561,10 +561,14 @@
     .rec-toggle-arrow.open { transform: rotate(180deg); }
     .rec-group-hdr {
       font-size: 11px; font-weight: 600; color: var(--sub);
-      padding: 12px 4px 4px; letter-spacing: 0.4px;
-      border-bottom: 0.5px solid var(--sep); margin-bottom: 6px;
+      padding: 10px 4px 4px; letter-spacing: 0.4px;
+      border-bottom: 0.5px solid var(--sep); margin-bottom: 4px;
+      cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+      user-select: none;
     }
     .rec-group-hdr-first { padding-top: 0; border-top: none; }
+    .rec-group-body { overflow: hidden; max-height: 0; transition: max-height 0.25s ease; }
+    .rec-group-body.open { max-height: 3000px; }
 
     /* ── CATEGORY MANAGER ── */
     .cat-teki-block { background: var(--card); border-radius: 12px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
@@ -1231,17 +1235,6 @@
           </select>
         </div>
       </div>
-      <div class="fg" id="ra-group-wrap">
-        <label>グループ（支出のみ）</label>
-        <select class="fs" id="ra-group">
-          <option value="">未分類</option>
-          <option value="個人支払（支出）">個人支払（支出）</option>
-          <option value="個人支払（投資）">個人支払（投資）</option>
-          <option value="個人支払（社保）">個人支払（社保）</option>
-          <option value="事業支払">事業支払</option>
-          <option value="会社支払">会社支払</option>
-        </select>
-      </div>
       <div class="form-row">
         <div class="fg">
           <label>大カテゴリ</label>
@@ -1255,6 +1248,17 @@
             <option value="">選択</option>
           </select>
         </div>
+      </div>
+      <div class="fg" id="ra-group-wrap">
+        <label>グループ（支出のみ）</label>
+        <select class="fs" id="ra-group">
+          <option value="">未分類</option>
+          <option value="個人支払（支出）">個人支払（支出）</option>
+          <option value="個人支払（投資）">個人支払（投資）</option>
+          <option value="個人支払（社保）">個人支払（社保）</option>
+          <option value="事業支払">事業支払</option>
+          <option value="会社支払">会社支払</option>
+        </select>
       </div>
       <div class="form-row">
         <div class="fg">
@@ -3819,7 +3823,19 @@ function renderRecAnlList() {
     applyRecAnlListOpen();
     return;
   }
-  el.innerHTML = recs.map(r => {
+  // グループ分け：支出はグループ別、収入は「収入」グループ
+  const anlGroupOrder = [...REC_GROUPS, REC_GROUP_NONE, '収入'];
+  const anlGrouped = {};
+  anlGroupOrder.forEach(g => anlGrouped[g] = []);
+  recs.forEach(r => {
+    if (r.type === 'income') {
+      anlGrouped['収入'].push(r);
+    } else {
+      const g = r.group && anlGrouped[r.group] !== undefined ? r.group : REC_GROUP_NONE;
+      anlGrouped[g].push(r);
+    }
+  });
+  function recAnlItemHtml(r) {
     const isInc = r.type === 'income';
     const amtColor = isInc ? 'var(--success)' : 'var(--danger)';
     const sign = isInc ? '+' : '-';
@@ -3827,8 +3843,7 @@ function renderRecAnlList() {
       ? `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);font-size:10px;">収入</span>`
       : `<span class="tbadge ${tekiClass(r.teki||'敵２')}" style="font-size:10px;">${r.teki||'敵２'}</span>`;
     const label = [r.cat1, r.cat2].filter(Boolean).join(' › ') || r.name || '(未分類)';
-    return `
-    <div class="rec-item" onclick="openRecAnlModal('${r.id}')">
+    return `<div class="rec-item" onclick="openRecAnlModal('${r.id}')">
       <div class="rec-info">
         <div class="rec-name">${esc(r.name||label)}</div>
         <div class="rec-meta">${badge} ${esc(label)}</div>
@@ -3838,7 +3853,24 @@ function renderRecAnlList() {
         <span class="rec-day">毎月${r.day}日</span>
       </div>
     </div>`;
-  }).join('');
+  }
+  let html = '';
+  let isFirst = true;
+  anlGroupOrder.forEach(grpName => {
+    const items = anlGrouped[grpName];
+    if (!items.length) return;
+    const grpKey = 'recAnlGrp_' + grpName;
+    const isOpen = localStorage.getItem(grpKey) === '1';
+    html += `<div class="rec-group-hdr${isFirst?' rec-group-hdr-first':''}" onclick="toggleRecAnlGroup('${grpKey}')">
+      <span>${grpName}（${items.length}件）</span>
+      <span style="font-size:10px;">${isOpen?'▼':'▶'}</span>
+    </div>
+    <div class="rec-group-body${isOpen?' open':''}" id="body-${grpKey}">`;
+    isFirst = false;
+    items.forEach(r => { html += recAnlItemHtml(r); });
+    html += `</div>`;
+  });
+  el.innerHTML = html;
   applyRecAnlListOpen();
 }
 
@@ -4001,7 +4033,13 @@ function renderRecList() {
   groupOrder.forEach(grpName => {
     const items = grouped[grpName];
     if (!items.length) return;
-    html += `<div class="rec-group-hdr${isFirst?' rec-group-hdr-first':''}">${grpName}</div>`;
+    const grpKey = 'recGrp_' + grpName;
+    const isOpen = localStorage.getItem(grpKey) === '1';
+    html += `<div class="rec-group-hdr${isFirst?' rec-group-hdr-first':''}" onclick="toggleRecGroup('${grpKey}')">
+      <span>${grpName}（${items.length}件）</span>
+      <span style="font-size:10px;">${isOpen?'▼':'▶'}</span>
+    </div>
+    <div class="rec-group-body${isOpen?' open':''}" id="body-${grpKey}">`;
     isFirst = false;
     items.forEach(({ r, idx }) => {
       const already = (md.expenses||[]).some(e => e.recId === r.id);
@@ -4022,12 +4060,25 @@ function renderRecList() {
         </div>
       </div>`;
     });
+    html += `</div>`;
   });
   el.innerHTML = html;
   el.querySelectorAll('.drag-handle').forEach(h => {
     h.addEventListener('touchstart', e => recDragStart(e, parseInt(h.dataset.idx), h.dataset.group), { passive: false });
   });
   applyRecListOpen();
+}
+
+// ── rec group collapse ──
+function toggleRecGroup(grpKey) {
+  const cur = localStorage.getItem(grpKey) === '1';
+  localStorage.setItem(grpKey, cur ? '0' : '1');
+  renderRecList();
+}
+function toggleRecAnlGroup(grpKey) {
+  const cur = localStorage.getItem(grpKey) === '1';
+  localStorage.setItem(grpKey, cur ? '0' : '1');
+  renderRecAnlList();
 }
 
 // ── rec list collapse ──
