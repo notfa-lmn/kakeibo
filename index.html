@@ -3862,9 +3862,9 @@ function onRecAnlTypeChange() {
   const tekiWrap = document.getElementById('ra-teki-wrap');
   const groupWrap = document.getElementById('ra-group-wrap');
   tekiWrap.style.opacity = isInc ? '0.3' : '1';
-  document.getElementById('ra-teki').disabled = isInc;
+  tekiWrap.style.pointerEvents = isInc ? 'none' : '';
   groupWrap.style.opacity = isInc ? '0.3' : '1';
-  document.getElementById('ra-group').disabled = isInc;
+  groupWrap.style.pointerEvents = isInc ? 'none' : '';
   populateRecAnlCat1();
 }
 
