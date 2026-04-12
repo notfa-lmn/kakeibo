@@ -558,7 +558,7 @@
     .rec-toggle-arrow {
       display: inline-block; transition: transform 0.25s ease; font-size: 10px;
     }
-    .rec-toggle-arrow.open { transform: rotate(180deg); }
+    .rec-toggle-arrow.open { transform: rotate(90deg); }
     .rec-group-hdr {
       font-size: 11px; font-weight: 600; color: var(--sub);
       padding: 10px 4px 4px; letter-spacing: 0.4px;
@@ -978,7 +978,7 @@
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecIncList()" id="rec-inc-toggle-btn">
         <span>定期収入 自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-inc-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-inc-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecIncModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -990,7 +990,7 @@
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
         <span id="rec-toggle-label">定期支出（敵１）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -1002,7 +1002,7 @@
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecTeki3List()" id="rec-teki3-toggle-btn">
         <span>定期支出（敵３）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-teki3-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-teki3-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecTeki3Modal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -1014,7 +1014,7 @@
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecAnlMonthlyList()" id="rec-anl-monthly-toggle-btn">
         <span>定期分析（月次）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-anl-monthly-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-anl-monthly-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecAnlModal(null,'monthly')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -1026,7 +1026,7 @@
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecAnlIntervalList()" id="rec-anl-interval-toggle-btn">
         <span>定期分析（不定期）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-anl-interval-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-anl-interval-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecAnlModal(null,'interval')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -4060,7 +4060,7 @@ function applyRecTeki3ListOpen() {
   const wrap = document.getElementById('rec-teki3-list-wrap');
   const arrow = document.getElementById('rec-teki3-toggle-arrow');
   if (!wrap) return;
-  if (recTeki3ListOpen) { wrap.style.maxHeight = wrap.scrollHeight + 'px'; if (arrow) arrow.classList.add('open'); }
+  if (recTeki3ListOpen) { wrap.style.maxHeight = '9999px'; if (arrow) arrow.classList.add('open'); }
   else                  { wrap.style.maxHeight = '0'; if (arrow) arrow.classList.remove('open'); }
 }
 function toggleRecTeki3Group(grpKey) {
@@ -4333,7 +4333,7 @@ function applyRecAnlMonthlyListOpen() {
   const wrap = document.getElementById('rec-anl-monthly-list-wrap');
   const arrow = document.getElementById('rec-anl-monthly-toggle-arrow');
   if (!wrap) return;
-  if (recAnlMonthlyListOpen) { wrap.style.maxHeight = wrap.scrollHeight + 'px'; if (arrow) arrow.classList.add('open'); }
+  if (recAnlMonthlyListOpen) { wrap.style.maxHeight = '9999px'; if (arrow) arrow.classList.add('open'); }
   else { wrap.style.maxHeight = '0'; if (arrow) arrow.classList.remove('open'); }
 }
 function toggleRecAnlIntervalList() {
@@ -4345,7 +4345,7 @@ function applyRecAnlIntervalListOpen() {
   const wrap = document.getElementById('rec-anl-interval-list-wrap');
   const arrow = document.getElementById('rec-anl-interval-toggle-arrow');
   if (!wrap) return;
-  if (recAnlIntervalListOpen) { wrap.style.maxHeight = wrap.scrollHeight + 'px'; if (arrow) arrow.classList.add('open'); }
+  if (recAnlIntervalListOpen) { wrap.style.maxHeight = '9999px'; if (arrow) arrow.classList.add('open'); }
   else { wrap.style.maxHeight = '0'; if (arrow) arrow.classList.remove('open'); }
 }
 
@@ -4583,7 +4583,7 @@ function applyRecListOpen() {
   const arrow = document.getElementById('rec-toggle-arrow');
   if (!wrap) return;
   if (recListOpen) {
-    wrap.style.maxHeight = wrap.scrollHeight + 'px';
+    wrap.style.maxHeight = '9999px';
     if (arrow) { arrow.classList.add('open'); }
   } else {
     wrap.style.maxHeight = '0';
