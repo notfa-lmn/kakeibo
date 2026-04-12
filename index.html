@@ -974,23 +974,11 @@
       <div class="set-note">※前月に次月分の予算を使った場合などの調整額（マイナス入力でOK）<br>※前月の「次月振込予定」は自動反映されます</div>
     </div>
 
-    <!-- Recurring -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
-        <span id="rec-toggle-label">定期支出（敵１）自動入力</span>
-        <span class="rec-toggle-arrow open" id="rec-toggle-arrow">▼</span>
-      </button>
-      <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
-    </div>
-    <div class="rec-list-wrap" id="rec-list-wrap">
-      <div id="rec-list"></div>
-    </div>
-
     <!-- Recurring Income -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecIncList()" id="rec-inc-toggle-btn">
         <span>定期収入 自動入力</span>
-        <span class="rec-toggle-arrow open" id="rec-inc-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-inc-toggle-arrow">▼</span>
       </button>
       <button onclick="openRecIncModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -998,11 +986,23 @@
       <div id="rec-inc-list"></div>
     </div>
 
-    <!-- Recurring Teki3 -->
+    <!-- Recurring 敵１ -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
+        <span id="rec-toggle-label">定期支出（敵１）自動入力</span>
+        <span class="rec-toggle-arrow" id="rec-toggle-arrow">▼</span>
+      </button>
+      <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
+    </div>
+    <div class="rec-list-wrap" id="rec-list-wrap">
+      <div id="rec-list"></div>
+    </div>
+
+    <!-- Recurring 敵３ -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecTeki3List()" id="rec-teki3-toggle-btn">
         <span>定期支出（敵３）自動入力</span>
-        <span class="rec-toggle-arrow open" id="rec-teki3-toggle-arrow">▼</span>
+        <span class="rec-toggle-arrow" id="rec-teki3-toggle-arrow">▼</span>
       </button>
       <button onclick="openRecTeki3Modal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
@@ -1010,16 +1010,28 @@
       <div id="rec-teki3-list"></div>
     </div>
 
-    <!-- Recurring Anl -->
+    <!-- Recurring Anl 月次 -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecAnlList()" id="rec-anl-toggle-btn">
-        <span>定期分析データ 自動入力</span>
-        <span class="rec-toggle-arrow open" id="rec-anl-toggle-arrow">▼</span>
+      <button class="rec-toggle-btn" onclick="toggleRecAnlMonthlyList()" id="rec-anl-monthly-toggle-btn">
+        <span>定期分析（月次）自動入力</span>
+        <span class="rec-toggle-arrow" id="rec-anl-monthly-toggle-arrow">▼</span>
       </button>
-      <button onclick="openRecAnlModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
+      <button onclick="openRecAnlModal(null,'monthly')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
     </div>
-    <div class="rec-list-wrap" id="rec-anl-list-wrap">
-      <div id="rec-anl-list"></div>
+    <div class="rec-list-wrap" id="rec-anl-monthly-list-wrap">
+      <div id="rec-anl-monthly-list"></div>
+    </div>
+
+    <!-- Recurring Anl 不定期 -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <button class="rec-toggle-btn" onclick="toggleRecAnlIntervalList()" id="rec-anl-interval-toggle-btn">
+        <span>定期分析（不定期）自動入力</span>
+        <span class="rec-toggle-arrow" id="rec-anl-interval-toggle-arrow">▼</span>
+      </button>
+      <button onclick="openRecAnlModal(null,'interval')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
+    </div>
+    <div class="rec-list-wrap" id="rec-anl-interval-list-wrap">
+      <div id="rec-anl-interval-list"></div>
     </div>
 
     <!-- Category management -->
@@ -1322,8 +1334,46 @@
           <input class="fi" type="text" id="ra-name" placeholder="例：家賃">
         </div>
         <div class="fg">
-          <label>毎月何日</label>
+          <label>何日</label>
           <input class="fi" type="number" id="ra-day" placeholder="1〜31" min="1" max="31">
+        </div>
+      </div>
+      <div class="fg">
+        <label>繰り返しタイプ</label>
+        <select class="fs" id="ra-rec-type" onchange="onRecAnlRecTypeChange()">
+          <option value="monthly">月次（敵１スタイル）</option>
+          <option value="interval">不定期（敵３スタイル）</option>
+        </select>
+      </div>
+      <!-- 月次のみ表示 -->
+      <div id="ra-monthly-wrap">
+        <div class="fg">
+          <label>繰り返し頻度</label>
+          <select class="fs" id="ra-freq">
+            <option value="">毎月</option>
+            <option value="bimonthly-even">隔月（偶数月：2,4,6,8,10,12月）</option>
+            <option value="bimonthly-odd">隔月（奇数月：1,3,5,7,9,11月）</option>
+          </select>
+        </div>
+      </div>
+      <!-- 不定期のみ表示 -->
+      <div id="ra-interval-wrap" style="display:none;">
+        <div class="form-row">
+          <div class="fg">
+            <label>初回発生月</label>
+            <input class="fi" type="month" id="ra-first-month">
+          </div>
+          <div class="fg">
+            <label>繰り返し間隔</label>
+            <select class="fs" id="ra-interval">
+              <option value="1">毎月</option>
+              <option value="2">隔月</option>
+              <option value="3">3ヶ月毎</option>
+              <option value="6">半年ごと</option>
+              <option value="12">年1回</option>
+              <option value="24">2年に1回</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -1824,10 +1874,10 @@ let anlMode = 'monthly'; // 'monthly' | 'mf'
 let curYear = new Date().getFullYear();
 let mfViewMonth = -1; // -1=年間サマリー, 0-11=月別明細
 let mfEditIdx = null; // null=新規, number=編集対象index
-let recListOpen = localStorage.getItem('recListOpen') !== 'false';
+let recListOpen = localStorage.getItem('recListOpen') === '1';
 let recDrag = null;
 let editRecIncId = null;
-let recIncListOpen = localStorage.getItem('recIncListOpen') !== 'false';
+let recIncListOpen = localStorage.getItem('recIncListOpen') === '1';
 
 // ═══════════════════════════════════════════════════
 //  DATA
@@ -3773,7 +3823,7 @@ function renderRecIncList() {
 
 function toggleRecIncList() {
   recIncListOpen = !recIncListOpen;
-  localStorage.setItem('recIncListOpen', recIncListOpen);
+  localStorage.setItem('recIncListOpen', recIncListOpen ? '1' : '0');
   applyRecIncListOpen();
 }
 function applyRecIncListOpen() {
@@ -3942,7 +3992,7 @@ function generateRecurringTeki3(mk) {
   save();
 }
 
-let recTeki3ListOpen = localStorage.getItem('recTeki3ListOpen') !== '0';
+let recTeki3ListOpen = localStorage.getItem('recTeki3ListOpen') === '1';
 
 function renderRecTeki3List() {
   const recs = D.settings.recurringTeki3||[];
@@ -4171,11 +4221,20 @@ function generateRecurringAnl(mk) {
   const isCurOrFuture = yr > today.getFullYear() ||
     (yr === today.getFullYear() && mo >= today.getMonth()+1);
   if (!isCurOrFuture && md.recAnlDone) return;
-  // 削除済み recAnlId のエントリを除去
   const validIds = new Set((D.settings.recurringAnl||[]).map(r => r.id));
   md.anlEntries = md.anlEntries.filter(e => !e.recAnlId || validIds.has(e.recAnlId));
   const recs = D.settings.recurringAnl || [];
   recs.filter(r => r.active !== false).forEach(r => {
+    if (r.recType === 'interval') {
+      // 不定期：間隔チェック
+      const [fyr, fmo] = (r.firstYearMonth || mk).split('-').map(Number);
+      const diff = (yr * 12 + mo - 1) - (fyr * 12 + fmo - 1);
+      if (diff < 0 || diff % (r.intervalMonths || 1) !== 0) return;
+    } else {
+      // 月次：隔月チェック
+      if (r.freq === 'bimonthly-even' && mo % 2 !== 0) return;
+      if (r.freq === 'bimonthly-odd'  && mo % 2 === 0) return;
+    }
     if (md.anlEntries.some(e => e.recAnlId === r.id)) return;
     const maxDay = new Date(yr, mo, 0).getDate();
     const day = Math.min(r.day||1, maxDay);
@@ -4197,79 +4256,95 @@ function generateRecurringAnl(mk) {
   save();
 }
 
-let recAnlListOpen = localStorage.getItem('recAnlListOpen') !== '0';
+let recAnlMonthlyListOpen = localStorage.getItem('recAnlMonthlyListOpen') === '1';
+let recAnlIntervalListOpen = localStorage.getItem('recAnlIntervalListOpen') === '1';
 
-function renderRecAnlList() {
-  const recs = D.settings.recurringAnl||[];
-  const el = document.getElementById('rec-anl-list');
+function recAnlItemHtml(r) {
+  const isInc = r.type === 'income';
+  const intLabels = {'1':'毎月','2':'隔月','3':'3ヶ月毎','6':'半年毎','12':'年1回','24':'2年に1回'};
+  const freqLabels = {'':'毎月','bimonthly-even':'偶数月','bimonthly-odd':'奇数月'};
+  const amtColor = isInc ? 'var(--success)' : 'var(--danger)';
+  const sign = isInc ? '+' : '-';
+  const badge = isInc
+    ? `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);font-size:10px;">収入</span>`
+    : `<span class="tbadge ${tekiClass(r.teki||'敵２')}" style="font-size:10px;">${r.teki||'敵２'}</span>`;
+  const label = [r.cat1, r.cat2].filter(Boolean).join(' › ') || r.name || '(未分類)';
+  const cycleMeta = r.recType === 'interval'
+    ? `${r.firstYearMonth||''}〜 · ${intLabels[String(r.intervalMonths||1)]||r.intervalMonths+'ヶ月毎'}`
+    : (freqLabels[r.freq||''] || '毎月');
+  return `<div class="rec-item" onclick="openRecAnlModal('${r.id}')">
+    <div class="rec-info">
+      <div class="rec-name">${esc(r.name||label)}</div>
+      <div class="rec-meta">${badge} ${esc(label)} · ${cycleMeta}</div>
+    </div>
+    <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+      <div class="rec-amount" style="color:${amtColor};">${sign}${yen(r.amount)}</div>
+      <span class="rec-day">${r.day}日</span>
+    </div>
+  </div>`;
+}
+
+function renderRecAnlSubList(elId, filterFn, grpPrefix, toggleFn) {
+  const recs = (D.settings.recurringAnl||[]).filter(filterFn);
+  const el = document.getElementById(elId);
   if (!el) return;
   if (!recs.length) {
-    el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">定期分析データが登録されていません</div>`;
-    applyRecAnlListOpen();
+    el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:14px;">登録されていません</div>`;
     return;
   }
-  // グループ分け：支出はグループ別、収入は「収入」グループ
   const anlGroupOrder = [...REC_GROUPS, REC_GROUP_NONE, '収入'];
   const anlGrouped = {};
   anlGroupOrder.forEach(g => anlGrouped[g] = []);
   recs.forEach(r => {
-    if (r.type === 'income') {
-      anlGrouped['収入'].push(r);
-    } else {
-      const g = r.group && anlGrouped[r.group] !== undefined ? r.group : REC_GROUP_NONE;
-      anlGrouped[g].push(r);
-    }
+    if (r.type === 'income') { anlGrouped['収入'].push(r); }
+    else { const g = r.group && anlGrouped[r.group] !== undefined ? r.group : REC_GROUP_NONE; anlGrouped[g].push(r); }
   });
-  function recAnlItemHtml(r) {
-    const isInc = r.type === 'income';
-    const amtColor = isInc ? 'var(--success)' : 'var(--danger)';
-    const sign = isInc ? '+' : '-';
-    const badge = isInc
-      ? `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);font-size:10px;">収入</span>`
-      : `<span class="tbadge ${tekiClass(r.teki||'敵２')}" style="font-size:10px;">${r.teki||'敵２'}</span>`;
-    const label = [r.cat1, r.cat2].filter(Boolean).join(' › ') || r.name || '(未分類)';
-    return `<div class="rec-item" onclick="openRecAnlModal('${r.id}')">
-      <div class="rec-info">
-        <div class="rec-name">${esc(r.name||label)}</div>
-        <div class="rec-meta">${badge} ${esc(label)}</div>
-      </div>
-      <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-        <div class="rec-amount" style="color:${amtColor};">${sign}${yen(r.amount)}</div>
-        <span class="rec-day">毎月${r.day}日</span>
-      </div>
-    </div>`;
-  }
-  let html = '';
-  let isFirst = true;
+  let html = ''; let isFirst = true;
   anlGroupOrder.forEach(grpName => {
     const items = anlGrouped[grpName];
     if (!items.length) return;
-    const grpKey = 'recAnlGrp_' + grpName;
+    const grpKey = grpPrefix + grpName;
     const isOpen = localStorage.getItem(grpKey) === '1';
     html += `<div class="rec-group-hdr${isFirst?' rec-group-hdr-first':''}" onclick="toggleRecAnlGroup('${grpKey}')">
-      <span>${grpName}（${items.length}件）</span>
-      <span style="font-size:10px;">${isOpen?'▼':'▶'}</span>
-    </div>
-    <div class="rec-group-body${isOpen?' open':''}" id="body-${grpKey}">`;
+      <span>${grpName}（${items.length}件）</span><span style="font-size:10px;">${isOpen?'▼':'▶'}</span>
+    </div><div class="rec-group-body${isOpen?' open':''}" id="body-${grpKey}">`;
     isFirst = false;
     items.forEach(r => { html += recAnlItemHtml(r); });
     html += `</div>`;
   });
   el.innerHTML = html;
-  applyRecAnlListOpen();
 }
 
-function toggleRecAnlList() {
-  recAnlListOpen = !recAnlListOpen;
-  localStorage.setItem('recAnlListOpen', recAnlListOpen ? '1' : '0');
-  applyRecAnlListOpen();
+function renderRecAnlList() {
+  renderRecAnlSubList('rec-anl-monthly-list', r => r.recType !== 'interval', 'recAnlMGrp_', 'toggleRecAnlMonthlyList');
+  applyRecAnlMonthlyListOpen();
+  renderRecAnlSubList('rec-anl-interval-list', r => r.recType === 'interval', 'recAnlIGrp_', 'toggleRecAnlIntervalList');
+  applyRecAnlIntervalListOpen();
 }
-function applyRecAnlListOpen() {
-  const wrap = document.getElementById('rec-anl-list-wrap');
-  const arrow = document.getElementById('rec-anl-toggle-arrow');
+
+function toggleRecAnlMonthlyList() {
+  recAnlMonthlyListOpen = !recAnlMonthlyListOpen;
+  localStorage.setItem('recAnlMonthlyListOpen', recAnlMonthlyListOpen ? '1' : '0');
+  applyRecAnlMonthlyListOpen();
+}
+function applyRecAnlMonthlyListOpen() {
+  const wrap = document.getElementById('rec-anl-monthly-list-wrap');
+  const arrow = document.getElementById('rec-anl-monthly-toggle-arrow');
   if (!wrap) return;
-  if (recAnlListOpen) { wrap.classList.add('open'); if (arrow) arrow.classList.add('open'); }
-  else               { wrap.classList.remove('open'); if (arrow) arrow.classList.remove('open'); }
+  if (recAnlMonthlyListOpen) { wrap.style.maxHeight = wrap.scrollHeight + 'px'; if (arrow) arrow.classList.add('open'); }
+  else { wrap.style.maxHeight = '0'; if (arrow) arrow.classList.remove('open'); }
+}
+function toggleRecAnlIntervalList() {
+  recAnlIntervalListOpen = !recAnlIntervalListOpen;
+  localStorage.setItem('recAnlIntervalListOpen', recAnlIntervalListOpen ? '1' : '0');
+  applyRecAnlIntervalListOpen();
+}
+function applyRecAnlIntervalListOpen() {
+  const wrap = document.getElementById('rec-anl-interval-list-wrap');
+  const arrow = document.getElementById('rec-anl-interval-toggle-arrow');
+  if (!wrap) return;
+  if (recAnlIntervalListOpen) { wrap.style.maxHeight = wrap.scrollHeight + 'px'; if (arrow) arrow.classList.add('open'); }
+  else { wrap.style.maxHeight = '0'; if (arrow) arrow.classList.remove('open'); }
 }
 
 let editRecAnlId = null;
@@ -4318,15 +4393,27 @@ function populateRecAnlCat2(selectedCat2) {
   if (selectedCat2) cat2Sel.value = selectedCat2;
 }
 
-function openRecAnlModal(id) {
+function onRecAnlRecTypeChange() {
+  const isInterval = document.getElementById('ra-rec-type').value === 'interval';
+  document.getElementById('ra-monthly-wrap').style.display = isInterval ? 'none' : '';
+  document.getElementById('ra-interval-wrap').style.display = isInterval ? '' : 'none';
+}
+
+function openRecAnlModal(id, defaultRecType) {
   editRecAnlId = id;
   const modal = document.getElementById('rec-anl-modal');
+  const todayMk = todayMonthKey();
   if (id) {
     const r = (D.settings.recurringAnl||[]).find(x => x.id === id);
     if (!r) return;
     document.getElementById('rec-anl-modal-title').textContent = '定期分析データを編集';
     document.getElementById('ra-name').value = r.name||'';
     document.getElementById('ra-day').value = r.day||'';
+    document.getElementById('ra-rec-type').value = r.recType||'monthly';
+    onRecAnlRecTypeChange();
+    document.getElementById('ra-freq').value = r.freq||'';
+    document.getElementById('ra-first-month').value = r.firstYearMonth||todayMk;
+    document.getElementById('ra-interval').value = String(r.intervalMonths||12);
     document.getElementById('ra-type').value = r.type||'expense';
     document.getElementById('ra-teki').value = r.teki||'敵２';
     onRecAnlTypeChange();
@@ -4339,6 +4426,11 @@ function openRecAnlModal(id) {
     document.getElementById('rec-anl-modal-title').textContent = '定期分析データを追加';
     document.getElementById('ra-name').value = '';
     document.getElementById('ra-day').value = '';
+    document.getElementById('ra-rec-type').value = defaultRecType || 'monthly';
+    onRecAnlRecTypeChange();
+    document.getElementById('ra-freq').value = '';
+    document.getElementById('ra-first-month').value = todayMk;
+    document.getElementById('ra-interval').value = '12';
     document.getElementById('ra-type').value = 'expense';
     document.getElementById('ra-teki').value = '敵２';
     onRecAnlTypeChange();
@@ -4355,10 +4447,16 @@ function saveRecAnl() {
   const name = document.getElementById('ra-name').value.trim();
   const day  = parseInt(document.getElementById('ra-day').value)||0;
   const amount = parseFloat(document.getElementById('ra-amount').value)||0;
+  const recType = document.getElementById('ra-rec-type').value;
+  const firstYearMonth = document.getElementById('ra-first-month').value;
   if (!name || day < 1 || day > 31 || amount <= 0) { alert('名称・日・金額を正しく入力してください'); return; }
+  if (recType === 'interval' && !firstYearMonth) { alert('初回発生月を入力してください'); return; }
   const type = document.getElementById('ra-type').value;
   const rec = {
-    name, day, amount, type,
+    name, day, amount, type, recType,
+    freq: recType === 'monthly' ? (document.getElementById('ra-freq').value||'') : '',
+    firstYearMonth: recType === 'interval' ? firstYearMonth : '',
+    intervalMonths: recType === 'interval' ? (parseInt(document.getElementById('ra-interval').value)||12) : 1,
     teki: type === 'expense' ? document.getElementById('ra-teki').value : null,
     cat1: document.getElementById('ra-cat1').value||'',
     cat2: document.getElementById('ra-cat2').value||'',
@@ -4463,13 +4561,18 @@ function toggleRecGroup(grpKey) {
 function toggleRecAnlGroup(grpKey) {
   const cur = localStorage.getItem(grpKey) === '1';
   localStorage.setItem(grpKey, cur ? '0' : '1');
-  renderRecAnlList();
+  // どちらのリストに属するか判定して再描画
+  if (grpKey.startsWith('recAnlMGrp_')) {
+    renderRecAnlSubList('rec-anl-monthly-list', r => r.recType !== 'interval', 'recAnlMGrp_');
+  } else {
+    renderRecAnlSubList('rec-anl-interval-list', r => r.recType === 'interval', 'recAnlIGrp_');
+  }
 }
 
 // ── rec list collapse ──
 function toggleRecList() {
   recListOpen = !recListOpen;
-  localStorage.setItem('recListOpen', recListOpen);
+  localStorage.setItem('recListOpen', recListOpen ? '1' : '0');
   applyRecListOpen();
 }
 function applyRecListOpen() {
