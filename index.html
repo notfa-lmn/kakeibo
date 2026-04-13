@@ -1870,9 +1870,8 @@ let editId = null;
 let selSatVal = '△';
 let selRecSatVal = '○';
 let editRecId = null;
-let anlMode = 'monthly'; // 'monthly' | 'mf'
+let anlMode = 'monthly'; // 'monthly' | 'annual' | 'mf' | 'mf-annual'
 let curYear = new Date().getFullYear();
-let mfViewMonth = -1; // -1=年間サマリー, 0-11=月別明細
 let mfEditIdx = null; // null=新規, number=編集対象index
 let recListOpen = localStorage.getItem('recListOpen') === '1';
 let recDrag = null;
@@ -1942,6 +1941,8 @@ function mdata(key) {
   if (!D.months[key].anlEntries) D.months[key].anlEntries = [];
   if (D.months[key].recAnlDone === undefined) D.months[key].recAnlDone = false;
   if (D.months[key].recTeki3Done === undefined) D.months[key].recTeki3Done = false;
+  if (!D.months[key].mfRecords) D.months[key].mfRecords = [];
+  if (D.months[key].mfImportedAt === undefined) D.months[key].mfImportedAt = '';
   return D.months[key];
 }
 
@@ -2741,10 +2742,11 @@ function totalInvestSavings(mk) {
 
 function renderAnalytics() {
   // ナビ切り替え
-  document.getElementById('anl-month-nav').style.display = anlMode === 'monthly' ? '' : 'none';
-  document.getElementById('anl-year-nav').style.display  = (anlMode === 'annual' || anlMode === 'mf') ? '' : 'none';
+  document.getElementById('anl-month-nav').style.display = (anlMode === 'monthly' || anlMode === 'mf') ? '' : 'none';
+  document.getElementById('anl-year-nav').style.display  = (anlMode === 'annual' || anlMode === 'mf-annual') ? '' : 'none';
   if (anlMode === 'annual') { renderAnnualAnalytics(); return; }
-  if (anlMode === 'mf') { renderMfAnnual(); return; }
+  if (anlMode === 'mf') { renderMfMonthly(); return; }
+  if (anlMode === 'mf-annual') { renderMfAnnualAgg(); return; }
 
   document.getElementById('anl-month').textContent = monthLabel(curMonth);
   const expAgg   = aggregateExpenses(curMonth);
@@ -2762,9 +2764,9 @@ function renderAnalytics() {
 
   let html = `
     <div class="anl-tab-row">
-      <button class="anl-tab ${anlMode==='monthly'?'active':''}" onclick="setAnlMode('monthly')">月次</button>
-      <button class="anl-tab ${anlMode==='annual'?'active':''}" onclick="setAnlMode('annual')">年間</button>
-      <button class="anl-tab ${anlMode==='mf'?'active':''}" onclick="setAnlMode('mf')">MF取込</button>
+      <button class="anl-tab active" onclick="setAnlMode('monthly')">月次</button>
+      <button class="anl-tab" onclick="setAnlMode('annual')">年間</button>
+      <button class="anl-tab" onclick="setAnlMode('mf')">MF取込</button>
     </div>
     <button class="mf-add-btn" onclick="openAnlEntryModal(null)">＋ 分析用データを手入力（収支一覧に表示されません）</button>`;
 
@@ -3076,121 +3078,169 @@ function mfAllCat1(records) { return [...new Set(records.map(r=>r.cat1||'').filt
 function mfAllCat2(records) { return [...new Set(records.map(r=>r.cat2||'').filter(Boolean))].sort(); }
 function mfAllInst(records) { return [...new Set(records.map(r=>r.institution||'').filter(Boolean))].sort(); }
 
-function renderMfAnnual() {
-  document.getElementById('anl-year').textContent = `${curYear}年`;
-  if (!D.mfData) D.mfData = {};
-  const yearEntry = D.mfData[curYear];
+// ── MF共通：大項目別集計ブロック ──
+function renderMfCatBlock(recsFiltered, isInc, monthCount) {
+  const agg = {};
+  recsFiltered.forEach(r => {
+    const c1 = r.cat1 || '(未分類)';
+    const c2 = r.cat2 || '(未分類)';
+    if (!agg[c1]) agg[c1] = { total:0, cats:{} };
+    const v = Math.abs(r.amount);
+    agg[c1].total += v;
+    agg[c1].cats[c2] = (agg[c1].cats[c2]||0) + v;
+  });
+  let h = '';
+  Object.entries(agg).sort((a,b)=>b[1].total-a[1].total).forEach(([c1, d]) => {
+    const valColor = isInc ? 'color:var(--success);' : '';
+    const subInfo = monthCount > 1 ? `<div style="font-size:11px;color:var(--sub);">月平均 ${yen(Math.round(d.total/monthCount))}</div>` : '';
+    h += `<div class="yr-cat-block">
+      <div class="yr-cat-hdr" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.yr-arr').classList.toggle('open')">
+        <span style="font-size:14px;font-weight:600;">${esc(c1)}</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="text-align:right;">
+            <div style="font-weight:700;font-size:15px;${valColor}">${yen(d.total)}</div>
+            ${subInfo}
+          </div>
+          <span class="yr-arr" style="color:var(--sub);font-size:14px;transition:transform 0.2s;">›</span>
+        </div>
+      </div>
+      <div class="yr-cat-body">`;
+    Object.entries(d.cats).sort((a,b)=>b[1]-a[1]).forEach(([c2, total]) => {
+      const c2sub = monthCount > 1 ? `<div class="yr-cat-avg">月平均 ${yen(Math.round(total/monthCount))}</div>` : '';
+      h += `<div class="yr-cat-row">
+        <div class="yr-cat-name">${esc(c2)}</div>
+        <div class="yr-cat-total" style="${valColor}">${yen(total)}</div>
+        ${c2sub}
+      </div>`;
+    });
+    h += `</div></div>`;
+  });
+  return h;
+}
+
+// ── MF取込（月次ビュー）──
+function renderMfMonthly() {
+  document.getElementById('anl-month').textContent = monthLabel(curMonth);
+  const md = mdata(curMonth);
+  const records = md.mfRecords || [];
 
   const tabRow = `
     <div class="anl-tab-row">
       <button class="anl-tab" onclick="setAnlMode('monthly')">月次</button>
-      <button class="anl-tab active" onclick="setAnlMode('mf')">年間集計(MF)</button>
+      <button class="anl-tab" onclick="setAnlMode('annual')">年間</button>
+      <button class="anl-tab active" onclick="setAnlMode('mf')">MF取込</button>
     </div>`;
 
   const importBox = `
     <div class="mf-import-box">
       <div class="mf-import-info">
-        <strong>マネーフォワードME データ</strong>
-        ${yearEntry ? `取込済: ${yearEntry.importedAt}（${yearEntry.records.length}件）` : '未取込'}
+        <strong>${monthLabel(curMonth)} MFデータ</strong><br>
+        <span style="font-size:12px;">${records.length > 0 ? `取込済: ${md.mfImportedAt}（${records.length}件）` : '未取込'}</span>
       </div>
       <label class="mf-upload-label" for="mf-csv-input">
-        ${yearEntry ? '再取込' : 'CSVを取込'}
+        ${records.length > 0 ? '再取込' : 'CSVを取込'}
       </label>
     </div>
     <input type="file" id="mf-csv-input" accept=".csv" style="display:none;" onchange="importMfCsv(event)">`;
 
   let html = tabRow + importBox;
+  html += `<button onclick="setAnlMode('mf-annual')" style="display:block;width:100%;text-align:right;background:none;border:none;color:var(--primary);font-size:13px;padding:4px 0 8px;cursor:pointer;font-weight:600;">年間集計を見る →</button>`;
+  html += `<button class="mf-add-btn" onclick="openMfRecordModal(null)">＋ 明細を手入力</button>`;
 
-  if (!yearEntry || !yearEntry.records.length) {
-    html += `<button class="mf-add-btn" onclick="openMfRecordModal(null)">＋ 明細を手入力</button>
-    <div class="mf-empty">
-      マネーフォワードMEの「すべての入出金」画面から<br>
-      CSVをダウンロードして取り込んでください。<br><br>
-      <span style="font-size:12px;color:var(--sub);">振替取引は自動除外されます</span>
+  if (records.length === 0) {
+    html += `<div class="mf-empty">
+      マネーフォワードMEの収支明細CSVをダウンロードして<br>
+      「CSVを取込」から取り込んでください。<br><br>
+      <span style="font-size:12px;color:var(--sub);">振替取引・計算対象外は自動除外されます</span>
     </div>`;
-    document.getElementById('anl-body').innerHTML = html;
-    return;
+  } else {
+    const expTotal = records.filter(r=>r.amount<0).reduce((s,r)=>s+Math.abs(r.amount),0);
+    const incTotal = records.filter(r=>r.amount>0).reduce((s,r)=>s+r.amount,0);
+    const net = incTotal - expTotal;
+    html += `
+      <div class="yr-kpi-grid" style="margin-bottom:12px;">
+        <div class="yr-kpi"><div class="yr-kpi-label">収入</div><div class="yr-kpi-value" style="color:var(--success);">${yen(incTotal)}</div></div>
+        <div class="yr-kpi"><div class="yr-kpi-label">支出</div><div class="yr-kpi-value" style="color:var(--danger);">${yen(expTotal)}</div></div>
+        <div class="yr-kpi" style="grid-column:1/-1;"><div class="yr-kpi-label">収支</div><div class="yr-kpi-value" style="color:${net>=0?'var(--success)':'var(--danger)'};">${yenSigned(net)}</div></div>
+      </div>`;
+    const expRecs = records.filter(r=>r.amount<0);
+    const incRecs = records.filter(r=>r.amount>0);
+    if (expRecs.length > 0) { html += `<div class="mf-section-title">大項目別集計（支出）</div>`; html += renderMfCatBlock(expRecs, false, 1); }
+    if (incRecs.length > 0) { html += `<div class="mf-section-title">大項目別集計（収入）</div>`; html += renderMfCatBlock(incRecs, true, 1); }
+    html += `<div class="mf-section-title">明細一覧</div><div class="mf-list-table">`;
+    [...records].sort((a,b)=>a.date.localeCompare(b.date)).forEach((r, idx) => {
+      const isExp = r.amount < 0;
+      const amtColor = isExp ? 'var(--danger)' : 'var(--success)';
+      const cat = [r.cat1, r.cat2].filter(Boolean).join(' › ') || '(未分類)';
+      html += `<div class="mf-list-row" onclick="openMfRecordModal(${idx})">
+        <div class="mf-list-name">
+          <div class="mf-list-name-main">${esc(r.name||'（名称なし）')}</div>
+          <div class="mf-list-name-sub">${esc(r.date)}　${esc(cat)}</div>
+        </div>
+        <div class="mf-list-right">
+          <div class="mf-list-amount" style="color:${amtColor};">${isExp?'−':'＋'}${yen(Math.abs(r.amount))}</div>
+          <div class="mf-list-inst">${esc(r.institution||'')}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
   }
+  document.getElementById('anl-body').innerHTML = html;
+}
 
-  const records = yearEntry.records;
+// ── MF年間集計（各月のmfRecordsを集計）──
+function renderMfAnnualAgg() {
+  document.getElementById('anl-year').textContent = `${curYear}年`;
   const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
-  // ── 月別明細ビュー ──
-  if (mfViewMonth >= 0) {
-    const moRecs = records
-      .filter(r => mfRecordMonth(r.date, curYear) === mfViewMonth)
-      .sort((a,b) => a.date.localeCompare(b.date));
-    const moExp = moRecs.filter(r=>r.amount<0).reduce((s,r)=>s+Math.abs(r.amount),0);
-    const moInc = moRecs.filter(r=>r.amount>0).reduce((s,r)=>s+r.amount,0);
-    const moNet = moInc - moExp;
+  const tabRow = `
+    <div class="anl-tab-row">
+      <button class="anl-tab" onclick="setAnlMode('monthly')">月次</button>
+      <button class="anl-tab" onclick="setAnlMode('annual')">年間</button>
+      <button class="anl-tab active" onclick="setAnlMode('mf')">MF取込</button>
+    </div>`;
 
-    html += `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <button onclick="mfViewMonth=-1;renderMfAnnual();" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">‹ 年間に戻る</button>
-        <span style="font-size:15px;font-weight:700;">${curYear}年 ${MONTH_NAMES[mfViewMonth]}</span>
-      </div>
-      <div class="yr-kpi-grid" style="margin-bottom:12px;">
-        <div class="yr-kpi"><div class="yr-kpi-label">収入</div><div class="yr-kpi-value" style="color:var(--success);">${yen(moInc)}</div></div>
-        <div class="yr-kpi"><div class="yr-kpi-label">支出</div><div class="yr-kpi-value" style="color:var(--danger);">${yen(moExp)}</div></div>
-        <div class="yr-kpi" style="grid-column:1/-1;"><div class="yr-kpi-label">収支</div><div class="yr-kpi-value" style="color:${moNet>=0?'var(--success)':'var(--danger)'};">${yenSigned(moNet)}</div></div>
-      </div>
-      <button class="mf-add-btn" onclick="openMfRecordModal(null)">＋ 明細を手入力</button>`;
+  // 全月のmfRecordsを収集
+  const allRecords = [];
+  const monthExp = Array(12).fill(0);
+  const monthInc = Array(12).fill(0);
+  let importedMonths = 0;
+  for (let mo = 1; mo <= 12; mo++) {
+    const mk = `${curYear}-${String(mo).padStart(2,'0')}`;
+    const md = D.months[mk];
+    const recs = (md && md.mfRecords) ? md.mfRecords : [];
+    if (recs.length > 0) importedMonths++;
+    recs.forEach(r => {
+      allRecords.push(r);
+      if (r.amount < 0) monthExp[mo-1] += Math.abs(r.amount);
+      else monthInc[mo-1] += r.amount;
+    });
+  }
 
-    if (moRecs.length === 0) {
-      html += `<div class="mf-empty" style="padding:32px 24px;">この月の明細はありません</div>`;
-    } else {
-      html += `<div class="mf-list-table">`;
-      moRecs.forEach((r, i) => {
-        const isExp = r.amount < 0;
-        const dispAmt = isExp ? yen(Math.abs(r.amount)) : yen(r.amount);
-        const amtColor = isExp ? 'var(--danger)' : 'var(--success)';
-        const cat = [r.cat1, r.cat2].filter(Boolean).join(' › ') || '(未分類)';
-        const idx = records.indexOf(r);
-        html += `<div class="mf-list-row" onclick="openMfRecordModal(${idx})">
-          <div class="mf-list-name">
-            <div class="mf-list-name-main">${esc(r.name||'（名称なし）')}</div>
-            <div class="mf-list-name-sub">${esc(r.date)}　${esc(cat)}</div>
-          </div>
-          <div class="mf-list-right">
-            <div class="mf-list-amount" style="color:${amtColor};">${isExp?'−':'＋'}${dispAmt}</div>
-            <div class="mf-list-inst">${esc(r.institution||'')}</div>
-          </div>
-        </div>`;
-      });
-      html += `</div>`;
-    }
+  let html = tabRow;
+  html += `<button onclick="setAnlMode('mf')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--primary);font-size:13px;padding:4px 0 8px;cursor:pointer;font-weight:600;">‹ 月次に戻る</button>`;
 
+  if (allRecords.length === 0) {
+    html += `<div class="mf-empty">取込済みデータがありません。<br>各月の「MF取込」タブからCSVを取り込んでください。</div>`;
     document.getElementById('anl-body').innerHTML = html;
     return;
   }
-
-  // ── 年間サマリービュー ──
-  const monthExp = Array(12).fill(0);
-  const monthInc = Array(12).fill(0);
-  records.forEach(r => {
-    const mo = mfRecordMonth(r.date, curYear);
-    if (mo < 0) return;
-    if (r.amount < 0) monthExp[mo] += Math.abs(r.amount);
-    else monthInc[mo] += r.amount;
-  });
 
   const totalExp = monthExp.reduce((s,v)=>s+v,0);
   const totalInc = monthInc.reduce((s,v)=>s+v,0);
   const net = totalInc - totalExp;
-  const avgExp = Math.round(totalExp / 12);
-  const avgInc = Math.round(totalInc / 12);
 
   html += `
-    <div class="mf-section-title">年間サマリー</div>
+    <div class="mf-section-title">年間サマリー <span style="font-size:11px;color:var(--sub);font-weight:400;">${importedMonths}ヶ月分取込済</span></div>
     <div class="yr-kpi-grid">
       <div class="yr-kpi"><div class="yr-kpi-label">収入合計</div><div class="yr-kpi-value" style="color:var(--success);">${yen(totalInc)}</div></div>
       <div class="yr-kpi"><div class="yr-kpi-label">支出合計</div><div class="yr-kpi-value" style="color:var(--danger);">${yen(totalExp)}</div></div>
       <div class="yr-kpi"><div class="yr-kpi-label">年間収支</div><div class="yr-kpi-value" style="color:${net>=0?'var(--success)':'var(--danger)'};">${yenSigned(net)}</div></div>
-      <div class="yr-kpi"><div class="yr-kpi-label">月平均支出</div><div class="yr-kpi-value">${yen(avgExp)}</div></div>
-      <div class="yr-kpi"><div class="yr-kpi-label">月平均収入</div><div class="yr-kpi-value" style="color:var(--success);">${yen(avgInc)}</div></div>
+      <div class="yr-kpi"><div class="yr-kpi-label">月平均支出</div><div class="yr-kpi-value">${importedMonths>0?yen(Math.round(totalExp/importedMonths)):'—'}</div></div>
+      <div class="yr-kpi"><div class="yr-kpi-label">月平均収入</div><div class="yr-kpi-value" style="color:var(--success);">${importedMonths>0?yen(Math.round(totalInc/importedMonths)):'—'}</div></div>
     </div>`;
 
-  // ── 月別推移（タップで明細へ）──
+  // 月別推移（タップで各月のMF月次ビューへ）
   html += `
     <div class="mf-section-title">月別推移 <span style="font-size:11px;color:var(--sub);font-weight:400;">（タップで明細）</span></div>
     <div class="yr-month-table">
@@ -3201,7 +3251,8 @@ function renderMfAnnual() {
     const inc = monthInc[i];
     const net_m = inc - exp;
     const isEmpty = exp === 0 && inc === 0;
-    html += `<div class="mf-month-row" style="cursor:pointer;" onclick="mfViewMonth=${i};renderMfAnnual();">
+    const mk = `${curYear}-${String(i+1).padStart(2,'0')}`;
+    html += `<div class="mf-month-row" style="cursor:pointer;" onclick="curMonth='${mk}';setAnlMode('mf');">
       <div style="font-weight:600;">${MONTH_NAMES[i]}</div>
       <div style="color:var(--success);text-align:right;">${isEmpty?'—':yen(inc)}</div>
       <div style="color:var(--danger);text-align:right;">${isEmpty?'—':yen(exp)}</div>
@@ -3215,56 +3266,11 @@ function renderMfAnnual() {
     <div style="color:${net>=0?'var(--success)':'var(--danger)'};text-align:right;">${yenSigned(net)}</div>
   </div></div>`;
 
-  // ── 大項目別集計（支出） ──
-  const catBlock = (recsFiltered, isInc) => {
-    const agg = {};
-    recsFiltered.forEach(r => {
-      const c1 = r.cat1 || '(未分類)';
-      const c2 = r.cat2 || '(未分類)';
-      if (!agg[c1]) agg[c1] = { total:0, cats:{} };
-      const v = Math.abs(r.amount);
-      agg[c1].total += v;
-      agg[c1].cats[c2] = (agg[c1].cats[c2]||0) + v;
-    });
-    let h = '';
-    Object.entries(agg).sort((a,b)=>b[1].total-a[1].total).forEach(([c1, d]) => {
-      const avg = Math.round(d.total / 12);
-      const valColor = isInc ? 'color:var(--success);' : '';
-      h += `<div class="yr-cat-block">
-        <div class="yr-cat-hdr" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.yr-arr').classList.toggle('open')">
-          <span style="font-size:14px;font-weight:600;">${esc(c1)}</span>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="text-align:right;">
-              <div style="font-weight:700;font-size:15px;${valColor}">${yen(d.total)}</div>
-              <div style="font-size:11px;color:var(--sub);">月平均 ${yen(avg)}</div>
-            </div>
-            <span class="yr-arr" style="color:var(--sub);font-size:14px;transition:transform 0.2s;">›</span>
-          </div>
-        </div>
-        <div class="yr-cat-body">`;
-      Object.entries(d.cats).sort((a,b)=>b[1]-a[1]).forEach(([c2, total]) => {
-        const c2avg = Math.round(total/12);
-        h += `<div class="yr-cat-row">
-          <div class="yr-cat-name">${esc(c2)}</div>
-          <div class="yr-cat-total" style="${valColor}">${yen(total)}</div>
-          <div class="yr-cat-avg">月平均 ${yen(c2avg)}</div>
-        </div>`;
-      });
-      h += `</div></div>`;
-    });
-    return h;
-  };
-
-  const expRecs = records.filter(r => r.amount < 0);
-  const incRecs = records.filter(r => r.amount > 0);
-  if (expRecs.length > 0) {
-    html += `<div class="mf-section-title">大項目別集計（支出）</div>`;
-    html += catBlock(expRecs, false);
-  }
-  if (incRecs.length > 0) {
-    html += `<div class="mf-section-title">大項目別集計（収入）</div>`;
-    html += catBlock(incRecs, true);
-  }
+  // 大項目別集計
+  const expRecs = allRecords.filter(r=>r.amount<0);
+  const incRecs = allRecords.filter(r=>r.amount>0);
+  if (expRecs.length > 0) { html += `<div class="mf-section-title">大項目別集計（支出）</div>`; html += renderMfCatBlock(expRecs, false, importedMonths); }
+  if (incRecs.length > 0) { html += `<div class="mf-section-title">大項目別集計（収入）</div>`; html += renderMfCatBlock(incRecs, true, importedMonths); }
 
   document.getElementById('anl-body').innerHTML = html;
 }
@@ -3279,10 +3285,10 @@ function navToMonth(mk) {
 //  MF年間集計 — 明細モーダル（追加・編集・削除）
 // ═══════════════════════════════════════════════════
 function openMfRecordModal(idx) {
-  if (!D.mfData) D.mfData = {};
-  if (!D.mfData[curYear]) D.mfData[curYear] = { records:[], importedAt:'—' };
+  const md = mdata(curMonth);
+  if (!md.mfRecords) md.mfRecords = [];
 
-  const records = D.mfData[curYear].records;
+  const records = md.mfRecords;
   mfEditIdx = idx;
 
   const isEdit = idx !== null && idx !== undefined;
@@ -3348,11 +3354,11 @@ function saveMfRecord() {
   // 日付を YYYY/MM/DD 形式で統一
   const date = dateRaw.replace(/-/g, '/');
 
-  if (!D.mfData) D.mfData = {};
-  if (!D.mfData[curYear]) D.mfData[curYear] = { records:[], importedAt:'—' };
+  const md = mdata(curMonth);
+  if (!md.mfRecords) md.mfRecords = [];
 
-  const records = D.mfData[curYear].records;
-  const record = { id: `mf-${curYear}-${Date.now()}`, date, name, amount, cat1, cat2, institution: inst, memo };
+  const records = md.mfRecords;
+  const record = { id: `mf-${curMonth}-${Date.now()}`, date, name, amount, cat1, cat2, institution: inst, memo };
 
   if (mfEditIdx !== null && mfEditIdx !== undefined) {
     records[mfEditIdx] = record;
@@ -3370,7 +3376,7 @@ function saveMfRecord() {
 function deleteMfRecord() {
   if (mfEditIdx === null || mfEditIdx === undefined) return;
   if (!confirm('この明細を削除しますか？')) return;
-  D.mfData[curYear].records.splice(mfEditIdx, 1);
+  mdata(curMonth).mfRecords.splice(mfEditIdx, 1);
   save();
   closeMfRecordModal();
   renderAnalytics();
@@ -3461,27 +3467,31 @@ function importMfCsv(event) {
     catch(_) { text = new TextDecoder('utf-8').decode(ev.target.result); }
 
     const records = parseMfCsv(text);
-    if (!records) { alert('CSVの形式が認識できませんでした。\nマネーフォワードMEの「すべての入出金」CSVを使用してください。'); return; }
+    if (!records) { alert('CSVの形式が認識できませんでした。\nマネーフォワードMEの収支明細CSVを使用してください。'); return; }
     if (records.length === 0) { alert('取込対象のデータが見つかりませんでした。'); return; }
 
-    // 選択年のデータのみ抽出、IDを付与
-    const yearRecords = records
-      .filter(r => mfRecordMonth(r.date, curYear) >= 0)
-      .map((r, i) => ({ ...r, id: `mf-${curYear}-${Date.now()}-${i}` }));
+    // curMonth に合致するレコードのみ抽出
+    const [yr, mo] = curMonth.split('-').map(Number);
+    const monthRecords = records
+      .filter(r => {
+        const m = r.date.match(/^(\d{4})[\/\-](\d{2})/);
+        return m && parseInt(m[1]) === yr && parseInt(m[2]) === mo;
+      })
+      .map((r, i) => ({ ...r, id: `mf-${curMonth}-${Date.now()}-${i}` }));
 
-    if (!D.mfData) D.mfData = {};
-    D.mfData[curYear] = {
-      records: yearRecords,
-      allRecords: records.length,
-      importedAt: new Date().toLocaleDateString('ja-JP'),
-    };
+    const md = mdata(curMonth);
+    md.mfRecords = monthRecords;
+    md.mfImportedAt = new Date().toLocaleDateString('ja-JP');
+
     save();
     renderAnalytics();
     event.target.value = '';
 
-    if (yearRecords.length < records.length) {
-      const other = records.length - yearRecords.length;
-      alert(`取込完了: ${yearRecords.length}件（${curYear}年）\n※ ${other}件は他の年のデータのため除外しました`);
+    const other = records.length - monthRecords.length;
+    if (other > 0) {
+      alert(`取込完了: ${monthRecords.length}件（${monthLabel(curMonth)}）\n※ ${other}件は他の月のデータのため除外しました`);
+    } else {
+      alert(`取込完了: ${monthRecords.length}件（${monthLabel(curMonth)}）`);
     }
   };
   reader.readAsArrayBuffer(file);
