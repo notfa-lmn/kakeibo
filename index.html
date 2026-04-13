@@ -2722,17 +2722,27 @@ function aggregateIncomes(mk) {
     result.cats[cat].total += i.amount||0;
     if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + (i.amount||0);
   });
+  // MF収入
+  (md.mfRecords || []).filter(r => r.amount > 0).forEach(r => {
+    result.total += r.amount;
+    const cat = r.cat1 || '(未分類)';
+    const sub = r.cat2 || '';
+    if (!result.cats[cat]) result.cats[cat] = { total:0, subs:{} };
+    result.cats[cat].total += r.amount;
+    if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + r.amount;
+  });
   return result;
 }
 
 const TEKI_COLORS = { '敵１':'#1565c0','敵２':'#2e7d32','敵３':'#e65100','敵４':'#b71c1c' };
 
-// 分析用の支出合計（anlEntries含む）
+// 分析用の支出合計（anlEntries・mfRecords含む）
 function totalExpensesAnl(mk) {
   const md = mdata(mk);
   const base = (md.expenses||[]).reduce((s,e)=>s+(e.amount||0), 0);
   const anl  = (md.anlEntries||[]).filter(e=>e.type==='expense').reduce((s,e)=>s+(e.amount||0), 0);
-  return base + anl;
+  const mf   = (md.mfRecords||[]).filter(r=>r.amount<0).reduce((s,r)=>s+Math.abs(r.amount), 0);
+  return base + anl + mf;
 }
 // 分析用の投資+貯蓄合計
 function totalInvestSavings(mk) {
@@ -2866,6 +2876,48 @@ function renderAnalytics() {
     html += `</div></div>`;
   });
   html += `</div>`;
+
+  // ── MFデータ支出内訳 ──
+  const mfRecs = mdata(curMonth).mfRecords || [];
+  const mfExpRecs = mfRecs.filter(r => r.amount < 0);
+  if (mfExpRecs.length > 0) {
+    const mfExpTotal = mfExpRecs.reduce((s,r)=>s+Math.abs(r.amount),0);
+    // cat1別集計
+    const mfCatAgg = {};
+    mfExpRecs.forEach(r => {
+      const c = r.cat1 || '(未分類)';
+      const s = r.cat2 || '';
+      if (!mfCatAgg[c]) mfCatAgg[c] = { total:0, subs:{} };
+      mfCatAgg[c].total += Math.abs(r.amount);
+      if (s) mfCatAgg[c].subs[s] = (mfCatAgg[c].subs[s]||0) + Math.abs(r.amount);
+    });
+    html += `<div class="anl-section"><div class="anl-section-title">MF支出内訳</div><div class="anl-teki-block">
+      <div class="anl-teki-hdr" onclick="anlToggle('anl-mf-exp')">
+        <div class="anl-teki-hdr-left">
+          <span style="font-size:18px;">📊</span>
+          <span class="anl-teki-name">MFデータ（支出）</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="anl-teki-total" style="color:var(--danger);">${yen(mfExpTotal)}</span>
+          <span style="color:var(--sub);font-size:14px;" id="arr-anl-mf-exp">›</span>
+        </div>
+      </div>
+      <div class="anl-teki-body" id="anl-mf-exp">`;
+    Object.entries(mfCatAgg).sort((a,b)=>b[1].total-a[1].total).forEach(([cat, cv]) => {
+      const pct = mfExpTotal > 0 ? Math.min(100, cv.total/mfExpTotal*100) : 0;
+      html += `<div class="anl-cat-row">
+        <div class="anl-cat-top">
+          <span class="anl-cat-name">${esc(cat)}</span>
+          <span class="anl-cat-amt" style="color:var(--danger);">${yen(cv.total)}</span>
+        </div>
+        <div class="anl-bar-track"><div class="anl-bar-fill" style="width:${pct}%;background:var(--danger);opacity:0.7;"></div></div>`;
+      Object.entries(cv.subs).sort((a,b)=>b[1]-a[1]).forEach(([sub, amt]) => {
+        html += `<div class="anl-sub-row"><span>└ ${esc(sub)}</span><span>${yen(amt)}</span></div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div></div></div>`;
+  }
 
   // ── 分析用手入力データ一覧（編集・削除用） ──
   const anlAll = mdata(curMonth).anlEntries || [];
