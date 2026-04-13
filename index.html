@@ -3412,6 +3412,8 @@ function parseMfCsv(text) {
   const cat2Idx   = col('中項目');
   const memoIdx   = col('メモ');
   const transIdx  = col('振替');
+  const calcIdx   = col('計算対象');
+  const mfIdIdx   = col('ID');
 
   const clean = s => (s||'').replace(/^"|"$/g,'').trim();
 
@@ -3422,8 +3424,11 @@ function parseMfCsv(text) {
     const cols = parseCsvLine(line);
     if (cols.length < 3) continue;
 
-    // 振替は除外
-    if (transIdx >= 0 && clean(cols[transIdx]).toLowerCase() === 'true') continue;
+    // 振替は除外（MFは 0/1 で出力）
+    if (transIdx >= 0 && (clean(cols[transIdx]) === '1' || clean(cols[transIdx]).toLowerCase() === 'true')) continue;
+
+    // 計算対象外は除外（0 = 除外）
+    if (calcIdx >= 0 && clean(cols[calcIdx]) === '0') continue;
 
     const amtStr = clean(cols[amtIdx]).replace(/,/g, '');
     const amount = parseInt(amtStr, 10);
@@ -3440,6 +3445,7 @@ function parseMfCsv(text) {
       cat1:        cat1Idx  >= 0 ? clean(cols[cat1Idx])  : '',
       cat2:        cat2Idx  >= 0 ? clean(cols[cat2Idx])  : '',
       memo:        memoIdx  >= 0 ? clean(cols[memoIdx])  : '',
+      mfId:        mfIdIdx  >= 0 ? clean(cols[mfIdIdx])  : '',
     });
   }
   return records;
