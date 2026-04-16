@@ -1034,6 +1034,18 @@
       <div id="rec-anl-interval-list"></div>
     </div>
 
+    <!-- MF Category Mapping -->
+    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
+      <button class="rec-toggle-btn" onclick="toggleMfCatMapSection()" id="mf-cat-map-toggle-btn">
+        <span>MFカテゴリ → 敵マッピング設定</span>
+        <span class="rec-toggle-arrow" id="mf-cat-map-toggle-arrow">▶</span>
+      </button>
+    </div>
+    <div id="mf-cat-map-wrap" style="overflow:hidden;max-height:0;transition:max-height 0.3s ease;">
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">MFの大項目を各敵に割り当てます。「（除外）」にするとKPIの集計から除外されます。「（未設定）」はデフォルト設定が使われます。</div>
+      <div id="mf-cat-map-settings"></div>
+    </div>
+
     <!-- Category management -->
     <div class="section-title" style="padding-left:0;">支出カテゴリの管理</div>
     <div id="cat-mgr"></div>
@@ -1828,6 +1840,31 @@ const DEFAULT_EXPENSE_CATS = {
   '貯蓄':       ['貯蓄','その他']
 };
 
+// MF大項目 → 敵 デフォルトマッピング
+// 敵２の場合: MF大項目がアプリの大カテゴリ, MF中項目がサブカテゴリ
+// 敵１/３/４の場合: MF中項目がアプリのカテゴリ名
+const DEFAULT_MF_CAT_MAP = {
+  '食費':          '敵２',
+  '日用品':        '敵２',
+  '趣味・娯楽':    '敵２',
+  '交際費':        '敵２',
+  '交通費':        '敵２',
+  '教養・教育':    '敵２',
+  '衣服・美容':    '敵２',
+  '医療費':        '敵２',
+  '水道・光熱費':  '敵１',
+  '住宅':          '敵１',
+  '通信費':        '敵１',
+  '保険':          '敵１',
+  '特別な支出':    '敵４',
+  '税・社会保障':  '税・社会保障',
+  '投資':          '投資',
+  '貯蓄':          '貯蓄',
+  '現金・カード':  null,
+  '未分類':        null,
+};
+function getMfCatMap() { return Object.assign({}, DEFAULT_MF_CAT_MAP, D.settings.mfCatMap || {}); }
+
 // D.settings.expenseCats を参照するアクセサ
 function getEC() { return D.settings.expenseCats || DEFAULT_EXPENSE_CATS; }
 // フラット敵 or 敵２の大カテゴリ一覧
@@ -2124,6 +2161,69 @@ const TEKI_CSS = {
   '税・社会保障':'t5','投資':'t6','貯蓄':'t7'
 };
 function tekiClass(teki) { return TEKI_CSS[teki] || 't2'; }
+
+// ── MFカテゴリマッピング設定 ──
+function renderMfCatMapSettings() {
+  const el = document.getElementById('mf-cat-map-settings');
+  if (!el) return;
+
+  // 全月のmfRecordsから出現したMF大項目を収集
+  const allCat1s = new Set();
+  Object.values(D.months||{}).forEach(md => {
+    (md.mfRecords||[]).forEach(r => { if (r.cat1) allCat1s.add(r.cat1); });
+  });
+  // DEFAULT_MF_CAT_MAPのキーも含める
+  Object.keys(DEFAULT_MF_CAT_MAP).forEach(k => allCat1s.add(k));
+
+  const currentMap = getMfCatMap();
+  const tekiOptions = ['敵１','敵２','敵３','敵４','税・社会保障','投資','貯蓄','（除外）'];
+  const tekiOptHtml = tekiOptions.map(t =>
+    `<option value="${t === '（除外）' ? '' : t}">${esc(t)}</option>`
+  ).join('');
+
+  const rows = [...allCat1s].sort().map(cat1 => {
+    const cur = currentMap[cat1] === null ? '' : (currentMap[cat1] || '');
+    return `<div class="set-row">
+      <span class="set-label" style="font-size:13px;">${esc(cat1)}</span>
+      <select class="fs" style="width:130px;font-size:13px;" onchange="saveMfCatMapEntry('${esc(cat1)}',this.value)">
+        <option value="__unset__"${cur === undefined ? ' selected' : ''}>（未設定）</option>
+        ${tekiOptHtml}
+      </select>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = rows || `<div style="color:var(--sub);font-size:13px;text-align:center;padding:12px;">MFデータを取り込むとここに大項目が表示されます</div>`;
+
+  // 現在値をセレクトに反映
+  [...allCat1s].sort().forEach(cat1 => {
+    const sels = el.querySelectorAll('select');
+    const idx = [...allCat1s].sort().indexOf(cat1);
+    if (!sels[idx]) return;
+    const cur = Object.prototype.hasOwnProperty.call(currentMap, cat1) ? currentMap[cat1] : undefined;
+    const val = cur === null ? '' : (cur === undefined ? '__unset__' : cur);
+    sels[idx].value = val;
+  });
+}
+
+function toggleMfCatMapSection() {
+  const wrap = document.getElementById('mf-cat-map-wrap');
+  const arrow = document.getElementById('mf-cat-map-toggle-arrow');
+  const isOpen = wrap.style.maxHeight !== '0px' && wrap.style.maxHeight !== '';
+  wrap.style.maxHeight = isOpen ? '0' : '9999px';
+  if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
+}
+
+function saveMfCatMapEntry(cat1, val) {
+  if (!D.settings.mfCatMap) D.settings.mfCatMap = {};
+  if (val === '__unset__') {
+    delete D.settings.mfCatMap[cat1];
+  } else if (val === '') {
+    D.settings.mfCatMap[cat1] = null; // 除外
+  } else {
+    D.settings.mfCatMap[cat1] = val;
+  }
+  save();
+}
 
 function renderCatMgr() {
   initExpenseCats();
@@ -2696,6 +2796,21 @@ function aggregateExpenses(mk) {
     result[teki].cats[cat].total += e.amount||0;
     if (sub) result[teki].cats[cat].subs[sub] = (result[teki].cats[cat].subs[sub]||0) + (e.amount||0);
   });
+  // MF支出（マッピング済みのみ）
+  const mfMap = getMfCatMap();
+  (md.mfRecords || []).filter(r => r.amount < 0).forEach(r => {
+    const teki = mfMap[r.cat1];
+    if (!teki) return; // 未マッピングはスキップ（別セクションで表示）
+    const isTeki2 = teki === '敵２';
+    const cat  = isTeki2 ? (r.cat1 || '(未分類)') : (r.cat2 || r.cat1 || '(未分類)');
+    const sub  = isTeki2 ? (r.cat2 || '') : '';
+    const amt  = Math.abs(r.amount);
+    if (!result[teki]) result[teki] = { total:0, cats:{} };
+    result[teki].total += amt;
+    if (!result[teki].cats[cat]) result[teki].cats[cat] = { total:0, subs:{} };
+    result[teki].cats[cat].total += amt;
+    if (sub) result[teki].cats[cat].subs[sub] = (result[teki].cats[cat].subs[sub]||0) + amt;
+  });
   return result;
 }
 
@@ -2877,34 +2992,34 @@ function renderAnalytics() {
   });
   html += `</div>`;
 
-  // ── MFデータ支出内訳 ──
+  // ── MFデータ支出内訳（未マッピング分のみ） ──
   const mfRecs = mdata(curMonth).mfRecords || [];
-  const mfExpRecs = mfRecs.filter(r => r.amount < 0);
-  if (mfExpRecs.length > 0) {
-    const mfExpTotal = mfExpRecs.reduce((s,r)=>s+Math.abs(r.amount),0);
-    // cat1別集計
+  const mfMapNow = getMfCatMap();
+  const mfUnmappedRecs = mfRecs.filter(r => r.amount < 0 && !mfMapNow[r.cat1]);
+  if (mfUnmappedRecs.length > 0) {
+    const mfUnmappedTotal = mfUnmappedRecs.reduce((s,r)=>s+Math.abs(r.amount),0);
     const mfCatAgg = {};
-    mfExpRecs.forEach(r => {
+    mfUnmappedRecs.forEach(r => {
       const c = r.cat1 || '(未分類)';
       const s = r.cat2 || '';
       if (!mfCatAgg[c]) mfCatAgg[c] = { total:0, subs:{} };
       mfCatAgg[c].total += Math.abs(r.amount);
       if (s) mfCatAgg[c].subs[s] = (mfCatAgg[c].subs[s]||0) + Math.abs(r.amount);
     });
-    html += `<div class="anl-section"><div class="anl-section-title">MF支出内訳</div><div class="anl-teki-block">
-      <div class="anl-teki-hdr" onclick="anlToggle('anl-mf-exp')">
+    html += `<div class="anl-section"><div class="anl-section-title">MF支出（未マッピング）<span style="font-size:11px;color:var(--sub);font-weight:400;margin-left:8px;">設定でマッピングを追加できます</span></div><div class="anl-teki-block">
+      <div class="anl-teki-hdr" onclick="anlToggle('anl-mf-unmap')">
         <div class="anl-teki-hdr-left">
-          <span style="font-size:18px;">📊</span>
-          <span class="anl-teki-name">MFデータ（支出）</span>
+          <span style="font-size:18px;">❓</span>
+          <span class="anl-teki-name">未マッピング</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span class="anl-teki-total" style="color:var(--danger);">${yen(mfExpTotal)}</span>
-          <span style="color:var(--sub);font-size:14px;" id="arr-anl-mf-exp">›</span>
+          <span class="anl-teki-total" style="color:var(--danger);">${yen(mfUnmappedTotal)}</span>
+          <span style="color:var(--sub);font-size:14px;" id="arr-anl-mf-unmap">›</span>
         </div>
       </div>
-      <div class="anl-teki-body" id="anl-mf-exp">`;
+      <div class="anl-teki-body" id="anl-mf-unmap">`;
     Object.entries(mfCatAgg).sort((a,b)=>b[1].total-a[1].total).forEach(([cat, cv]) => {
-      const pct = mfExpTotal > 0 ? Math.min(100, cv.total/mfExpTotal*100) : 0;
+      const pct = mfUnmappedTotal > 0 ? Math.min(100, cv.total/mfUnmappedTotal*100) : 0;
       html += `<div class="anl-cat-row">
         <div class="anl-cat-top">
           <span class="anl-cat-name">${esc(cat)}</span>
@@ -3842,6 +3957,8 @@ function renderSettings() {
   renderRecAnlList();
   // category manager
   renderCatMgr();
+  // MFカテゴリマッピング
+  renderMfCatMapSettings();
 }
 
 function savePrevCredit(val) {
