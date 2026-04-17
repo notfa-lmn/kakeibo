@@ -3825,10 +3825,12 @@ function refreshBankDisplay() {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
-  const total = budgetSum + transferSum + prevCredit;
+  const companySales = (md.incomes||[]).filter(x => x.category === '会社売上').reduce((s,x) => s + (x.amount||0), 0);
+  const total = budgetSum + transferSum + prevCredit + companySales;
   document.getElementById('bank-val').textContent = yenSigned(total);
-  document.getElementById('bank-detail').textContent =
-    `予算残高: ${yenSigned(budgetSum)}　銀行振込: ${yen(transferSum)}　前月CC: ${yenSigned(prevCredit)}`;
+  const detailParts = [`予算残高: ${yenSigned(budgetSum)}`, `銀行振込: ${yen(transferSum)}`, `前月CC: ${yenSigned(prevCredit)}`];
+  if (companySales > 0) detailParts.push(`会社売上: ${yen(companySales)}`);
+  document.getElementById('bank-detail').textContent = detailParts.join('　');
   const pcEl = document.getElementById('prev-credit-input');
   if (document.activeElement !== pcEl) {
     pcEl.value = fmtYenVal(prevCredit);
