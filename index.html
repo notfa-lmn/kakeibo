@@ -2799,8 +2799,8 @@ function aggregateExpenses(mk) {
   // MF支出（マッピング済みのみ）
   const mfMap = getMfCatMap();
   (md.mfRecords || []).filter(r => r.amount < 0).forEach(r => {
-    const teki = mfMap[r.cat1];
-    if (!teki) return; // 未マッピングはスキップ（別セクションで表示）
+    const teki = mfMap[r.cat1]; // undefined=未マッピング, null=除外, string=集計先
+    if (!teki) return; // 未マッピング(undefined)・除外(null)はスキップ
     const isTeki2 = teki === '敵２';
     const cat  = isTeki2 ? (r.cat1 || '(未分類)') : (r.cat2 || r.cat1 || '(未分類)');
     const sub  = isTeki2 ? (r.cat2 || '') : '';
@@ -2837,8 +2837,9 @@ function aggregateIncomes(mk) {
     result.cats[cat].total += i.amount||0;
     if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + (i.amount||0);
   });
-  // MF収入
-  (md.mfRecords || []).filter(r => r.amount > 0).forEach(r => {
+  // MF収入（マッピング済み=収入系のものだけ加算、除外・未マッピングはスキップ）
+  const mfMapInc = getMfCatMap();
+  (md.mfRecords || []).filter(r => r.amount > 0 && mfMapInc[r.cat1]).forEach(r => {
     result.total += r.amount;
     const cat = r.cat1 || '(未分類)';
     const sub = r.cat2 || '';
@@ -2856,7 +2857,9 @@ function totalExpensesAnl(mk) {
   const md = mdata(mk);
   const base = (md.expenses||[]).reduce((s,e)=>s+(e.amount||0), 0);
   const anl  = (md.anlEntries||[]).filter(e=>e.type==='expense').reduce((s,e)=>s+(e.amount||0), 0);
-  const mf   = (md.mfRecords||[]).filter(r=>r.amount<0).reduce((s,r)=>s+Math.abs(r.amount), 0);
+  const mfMap = getMfCatMap();
+  // 除外(null)・未マッピング(undefined)はKPIから除外し、マッピング済み(string)のみ加算
+  const mf   = (md.mfRecords||[]).filter(r=>r.amount<0 && mfMap[r.cat1]).reduce((s,r)=>s+Math.abs(r.amount), 0);
   return base + anl + mf;
 }
 // 分析用の投資+貯蓄合計
@@ -2995,7 +2998,8 @@ function renderAnalytics() {
   // ── MFデータ支出内訳（未マッピング分のみ） ──
   const mfRecs = mdata(curMonth).mfRecords || [];
   const mfMapNow = getMfCatMap();
-  const mfUnmappedRecs = mfRecs.filter(r => r.amount < 0 && !mfMapNow[r.cat1]);
+  // マップにキー自体が存在しない = 未マッピング（null=除外設定は未マッピングに出さない）
+  const mfUnmappedRecs = mfRecs.filter(r => r.amount < 0 && !(r.cat1 in mfMapNow));
   if (mfUnmappedRecs.length > 0) {
     const mfUnmappedTotal = mfUnmappedRecs.reduce((s,r)=>s+Math.abs(r.amount),0);
     const mfCatAgg = {};
