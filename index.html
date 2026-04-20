@@ -4641,6 +4641,7 @@ function recAnlItemHtml(r) {
   const cycleMeta = r.recType === 'interval'
     ? `${r.firstYearMonth||''}〜 · ${intLabels[String(r.intervalMonths||1)]||r.intervalMonths+'ヶ月毎'}`
     : (freqLabels[r.freq||''] || '毎月');
+  const already = (mdata(curMonth).anlEntries||[]).some(e => e.recAnlId === r.id);
   return `<div class="rec-item" onclick="openRecAnlModal('${r.id}')">
     <div class="rec-info">
       <div class="rec-name">${esc(r.name||label)}</div>
@@ -4649,8 +4650,34 @@ function recAnlItemHtml(r) {
     <div class="rec-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
       <div class="rec-amount" style="color:${amtColor};">${sign}${yen(r.amount)}</div>
       <span class="rec-day">${r.day}日</span>
+      <button class="rec-apply-btn ${already?'applied':''}"
+        onclick="event.stopPropagation();applyRecurringAnl('${r.id}')">
+        ${already ? '✓ 反映済' : '＋ 反映'}
+      </button>
     </div>
   </div>`;
+}
+
+function applyRecurringAnl(recId) {
+  const r = (D.settings.recurringAnl||[]).find(x => x.id === recId);
+  if (!r) return;
+  const md = mdata(curMonth);
+  if ((md.anlEntries||[]).some(e => e.recAnlId === recId)) return; // 登録済 → 何もしない
+  const [yr, mo] = curMonth.split('-').map(Number);
+  const maxDay = new Date(yr, mo, 0).getDate();
+  const day = Math.min(r.day||1, maxDay);
+  const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  md.anlEntries.push({
+    id: uid(), recAnlId: recId,
+    date: dateStr, type: r.type,
+    teki: r.type === 'expense' ? (r.teki||'敵２') : null,
+    cat1: r.cat1||'', cat2: r.cat2||'',
+    group: r.group||'', amount: r.amount||0,
+    memo: r.name||'', auto: false
+  });
+  save();
+  renderRecAnlList();
+  renderScreen();
 }
 
 function renderRecAnlSubList(elId, filterFn, grpPrefix, toggleFn) {
@@ -4840,8 +4867,8 @@ function saveRecAnl() {
   } else {
     D.settings.recurringAnl.push({ id: uid(), ...rec });
   }
-  // 今月の recAnlDone をリセットして再生成
-  mdata(curMonth).recAnlDone = false;
+  // 全月の recAnlDone をリセット（過去月も次回ナビ時に再生成されるよう）
+  Object.keys(D.months).forEach(mk => { if (D.months[mk]) D.months[mk].recAnlDone = false; });
   save();
   generateRecurringAnl(curMonth);
   save();
