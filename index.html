@@ -1462,6 +1462,11 @@
           <input class="fi" type="number" id="ra-amount" placeholder="0">
         </div>
       </div>
+      <div class="fg" id="ra-start-month-wrap" style="display:none;">
+        <label>遡り入力開始月（空欄 = 今月のみ）</label>
+        <input class="fi" type="month" id="ra-start-month">
+        <div class="set-note">指定月〜今月まで自動で入力します</div>
+      </div>
       <button class="btn btn-p" onclick="saveRecAnl()">保存する</button>
       <button class="btn btn-d" id="ra-del-btn" style="display:none;" onclick="deleteRecAnl()">削除する</button>
     </div>
@@ -4819,6 +4824,8 @@ function openRecAnlModal(id, defaultRecType) {
     document.getElementById('ra-amount').value = r.amount||'';
     document.getElementById('ra-group').value = r.group||'';
     document.getElementById('ra-del-btn').style.display = '';
+    document.getElementById('ra-start-month-wrap').style.display = 'none';
+    document.getElementById('ra-start-month').value = '';
   } else {
     document.getElementById('rec-anl-modal-title').textContent = '定期分析データを追加';
     document.getElementById('ra-name').value = '';
@@ -4835,6 +4842,8 @@ function openRecAnlModal(id, defaultRecType) {
     document.getElementById('ra-amount').value = '';
     document.getElementById('ra-group').value = '';
     document.getElementById('ra-del-btn').style.display = 'none';
+    document.getElementById('ra-start-month-wrap').style.display = '';
+    document.getElementById('ra-start-month').value = '';
   }
   modal.classList.add('open');
 }
@@ -4869,26 +4878,80 @@ function saveRecAnl() {
   }
   // 全月の recAnlDone をリセット（過去月も次回ナビ時に再生成されるよう）
   Object.keys(D.months).forEach(mk => { if (D.months[mk]) D.months[mk].recAnlDone = false; });
+  // 遡り入力（新規作成時のみ）
+  const startMk = !editRecAnlId ? (document.getElementById('ra-start-month').value||'') : '';
+  const newId = !editRecAnlId ? D.settings.recurringAnl[D.settings.recurringAnl.length - 1].id : null;
   save();
   generateRecurringAnl(curMonth);
+  if (startMk && newId && startMk <= curMonth) {
+    backfillRecAnl(newId, startMk, prevMk(curMonth)); // curMonthはgenerateRecurringAnlで処理済み
+  }
   save();
   closeRecAnlModal();
   renderRecAnlList();
+  renderScreen();
 }
 
 async function deleteRecAnl() {
-  if (!editRecAnlId || !confirm('この定期分析データを削除しますか？')) return;
+  if (!editRecAnlId) return;
+  if (!confirm('この定期分析データを削除しますか？')) return;
+  const deletePast = confirm(
+    '過去に入力済みのデータも削除しますか？\n\n' +
+    '【OK】→ 過去データも全て削除\n' +
+    '【キャンセル】→ 設定のみ削除（過去データは残す）'
+  );
   D.settings.recurringAnl = (D.settings.recurringAnl||[]).filter(r => r.id !== editRecAnlId);
   const deletedId = editRecAnlId;
   Object.keys(D.months).forEach(mk => {
     const md = D.months[mk];
-    if (md && md.anlEntries) {
+    if (!md || !md.anlEntries) return;
+    if (deletePast) {
+      // 過去データも削除
       md.anlEntries = md.anlEntries.filter(e => e.recAnlId !== deletedId);
+    } else {
+      // 設定のみ削除：recAnlId を外して独立データとして保持
+      md.anlEntries.forEach(e => { if (e.recAnlId === deletedId) delete e.recAnlId; });
     }
   });
   await saveAndWait();
   closeRecAnlModal();
   renderRecAnlList();
+  renderScreen();
+}
+
+function backfillRecAnl(recId, startMk, endMk) {
+  const r = (D.settings.recurringAnl||[]).find(x => x.id === recId);
+  if (!r || r.active === false) return;
+  let mk = startMk;
+  while (mk <= endMk) {
+    const [yr, mo] = mk.split('-').map(Number);
+    const md = mdata(mk);
+    if (!(md.anlEntries||[]).some(e => e.recAnlId === recId)) {
+      let shouldAdd = true;
+      if (r.recType === 'interval') {
+        const [fyr, fmo] = (r.firstYearMonth || mk).split('-').map(Number);
+        const diff = (yr * 12 + mo - 1) - (fyr * 12 + fmo - 1);
+        shouldAdd = diff >= 0 && diff % (r.intervalMonths||1) === 0;
+      } else {
+        if (r.freq === 'bimonthly-even' && mo % 2 !== 0) shouldAdd = false;
+        if (r.freq === 'bimonthly-odd'  && mo % 2 === 0) shouldAdd = false;
+      }
+      if (shouldAdd) {
+        const maxDay = new Date(yr, mo, 0).getDate();
+        const day = Math.min(r.day||1, maxDay);
+        const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        md.anlEntries.push({
+          id: uid(), recAnlId: recId,
+          date: dateStr, type: r.type,
+          teki: r.type === 'expense' ? (r.teki||'敵２') : null,
+          cat1: r.cat1||'', cat2: r.cat2||'',
+          group: r.group||'', amount: r.amount||0,
+          memo: r.name||'', auto: true
+        });
+      }
+    }
+    mk = nextMk(mk);
+  }
 }
 
 function renderRecList() {
