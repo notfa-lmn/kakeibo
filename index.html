@@ -3083,36 +3083,81 @@ function renderAnalytics() {
     html += `</div></div></div>`;
   }
 
-  // ── 分析用手入力データ一覧（編集・削除用） ──
-  const anlAll = mdata(curMonth).anlEntries || [];
-  if (anlAll.length > 0) {
-    const anlListOpen = localStorage.getItem('anlListOpen') === '1';
-    const arrow = anlListOpen ? '▼' : '▶';
-    html += `<div class="anl-section">
-      <div class="anl-section-title" onclick="toggleAnlList()" style="cursor:pointer;display:flex;align-items:center;gap:6px;">
-        <span style="font-size:12px;">${arrow}</span>分析用データ一覧（タップで編集）<span style="font-size:12px;color:var(--sub);margin-left:auto;">${anlAll.length}件</span>
-      </div>`;
-    if (anlListOpen) {
-      html += `<div style="background:var(--card);border-radius:12px;overflow:hidden;">`;
-      anlAll
-        .slice().sort((a,b) => a.date.localeCompare(b.date))
-        .forEach(e => {
-          const isInc = e.type === 'income';
-          const label = [e.cat1, e.cat2].filter(Boolean).join(' › ') || '(未分類)';
+  // ── 全データ明細一覧 ──
+  {
+    const md2 = mdata(curMonth);
+    const mfMapAll = getMfCatMap();
+    const allItems = [];
+    // 通常支出
+    (md2.expenses||[]).forEach(e => {
+      allItems.push({
+        date: e.date, name: e.name||'',
+        label: [e.category, e.subcategory].filter(Boolean).join(' › ') || '(未分類)',
+        amount: -(e.amount||0), teki: e.teki||'敵２', src: 'expense', id: e.id,
+        onclick: `openEdit('${e.id}')`
+      });
+    });
+    // 通常収入（会社売上除く）
+    (md2.incomes||[]).filter(x => x.category !== '会社売上').forEach(i => {
+      allItems.push({
+        date: i.date, name: i.name||'',
+        label: [i.category, i.subcategory].filter(Boolean).join(' › ') || '(未分類)',
+        amount: i.amount||0, teki: null, src: 'income', id: i.id,
+        onclick: `openIncomeModal('${i.id}')`
+      });
+    });
+    // 分析用手入力（anlEntries）
+    (md2.anlEntries||[]).forEach(e => {
+      const isInc = e.type === 'income';
+      allItems.push({
+        date: e.date, name: [e.cat1, e.cat2].filter(Boolean).join(' › ') || '(未分類)',
+        label: e.memo||'', amount: isInc ? (e.amount||0) : -(e.amount||0),
+        teki: isInc ? null : (e.teki||'敵２'), src: 'anl', id: e.id,
+        onclick: `openAnlEntryModal('${e.id}')`
+      });
+    });
+    // MFデータ
+    (md2.mfRecords||[]).forEach((r, idx) => {
+      const mappedTeki = mfMapAll[r.cat1] || null;
+      allItems.push({
+        date: r.date, name: r.name||'',
+        label: [r.cat1, r.cat2].filter(Boolean).join(' › '),
+        amount: r.amount, teki: r.amount < 0 ? mappedTeki : null, src: 'mf',
+        onclick: `openMfRecordModal(${idx})`
+      });
+    });
+    allItems.sort((a,b) => a.date.localeCompare(b.date));
+
+    if (allItems.length > 0) {
+      const anlListOpen = localStorage.getItem('anlListOpen') === '1';
+      const arrow = anlListOpen ? '▼' : '▶';
+      html += `<div class="anl-section">
+        <div class="anl-section-title" onclick="toggleAnlList()" style="cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:12px;">${arrow}</span>データ明細一覧（タップで編集）<span style="font-size:12px;color:var(--sub);margin-left:auto;">${allItems.length}件</span>
+        </div>`;
+      if (anlListOpen) {
+        html += `<div style="background:var(--card);border-radius:12px;overflow:hidden;">`;
+        allItems.forEach(item => {
+          const isInc = item.amount >= 0;
           const amtColor = isInc ? 'var(--success)' : 'var(--danger)';
-          const sign = isInc ? '+' : '-';
-          const tekiBadge = !isInc ? `<span class="tbadge ${tekiClass(e.teki||'敵２')}" style="font-size:10px;">${e.teki||'敵２'}</span>` : `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);font-size:10px;">収入</span>`;
-          html += `<div onclick="openAnlEntryModal('${e.id}')" style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:0.5px solid var(--sep);cursor:pointer;gap:10px;">
+          const sign = isInc ? '+' : '';
+          let badge = '';
+          if (item.src === 'anl') badge = `<span class="anl-detail-badge">分析</span>`;
+          else if (item.src === 'mf') badge = `<span class="anl-detail-badge">MF</span>`;
+          const tekiStr = item.teki ? `<span class="tbadge ${tekiClass(item.teki)}" style="font-size:10px;">${item.teki}</span>` : (isInc ? `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);font-size:10px;">収入</span>` : '');
+          html += `<div onclick="${item.onclick}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:0.5px solid var(--sep);cursor:pointer;gap:10px;">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(label)}</div>
-              <div style="font-size:11px;color:var(--sub);margin-top:2px;">${e.date}　${tekiBadge}${e.memo?' · '+esc(e.memo):''}</div>
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(item.name)}</div>
+              <div style="font-size:11px;color:var(--sub);margin-top:2px;display:flex;align-items:center;gap:4px;">${item.date} ${tekiStr} ${badge} ${item.label?`<span>${esc(item.label)}</span>`:''}
+              </div>
             </div>
-            <div style="font-weight:700;font-size:14px;color:${amtColor};flex-shrink:0;">${sign}${yen(e.amount)}</div>
+            <div style="font-weight:700;font-size:14px;color:${amtColor};flex-shrink:0;">${sign}${yen(Math.abs(item.amount))}</div>
           </div>`;
         });
+        html += `</div>`;
+      }
       html += `</div>`;
     }
-    html += `</div>`;
   }
 
   document.getElementById('anl-body').innerHTML = html;
