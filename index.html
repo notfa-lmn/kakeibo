@@ -2911,9 +2911,10 @@ function renderAnalytics() {
   document.getElementById('anl-month').textContent = monthLabel(curMonth);
   const expAgg   = aggregateExpenses(curMonth);
   const incAgg   = aggregateIncomes(curMonth);
-  const expTotal = totalExpensesAnl(curMonth);
-  const incTotal = incAgg.total;
   const investSav = totalInvestSavings(curMonth);
+  // 支出合計は敵１〜４・税社保のみ（貯蓄・投資は除外）
+  const expTotal = totalExpensesAnl(curMonth) - investSav;
+  const incTotal = incAgg.total;
   // 支出率・貯蓄率（収入ベース）
   const expRate  = incTotal > 0 ? Math.round(expTotal / incTotal * 100) : null;
   const savRate  = incTotal > 0 ? Math.round(investSav / incTotal * 100) : null;
@@ -3216,9 +3217,10 @@ function renderAnnualAnalytics() {
   const monthStats = activeMonths.map(mk => {
     const expAgg = aggregateExpenses(mk);
     const incAgg = aggregateIncomes(mk);
-    const expTotal = totalExpensesAnl(mk);
-    const incTotal = incAgg.total;
     const investSav = totalInvestSavings(mk);
+    // 支出合計は敵１〜４・税社保のみ（貯蓄・投資は除外）
+    const expTotal = totalExpensesAnl(mk) - investSav;
+    const incTotal = incAgg.total;
     return { mk, expTotal, incTotal, investSav, expAgg };
   });
 
