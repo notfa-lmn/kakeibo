@@ -848,7 +848,7 @@
     <!-- Payment type -->
     <div class="fg">
       <label>支払種別（予算財布）</label>
-      <select class="fs" id="f-pay" onchange="onAmountInput()">
+      <select class="fs" id="f-pay" onchange="onPayTypeChange()">
         <option value="">― 種別なし（敵１ / 銀行振込）</option>
         <option value="食料品">食料品</option>
         <option value="日用品">日用品</option>
@@ -4921,6 +4921,18 @@ function openEdit(id) {
   document.getElementById('delete-btn').style.display = '';
   document.getElementById('hdr-title').textContent = '支出を編集';
   switchScreen('add');
+}
+
+const BUDGET_AUTO_FILL_CATS = new Set(['特別費','配当金','敵３','投資待機資金']);
+
+function onPayTypeChange() {
+  const payType = document.getElementById('f-pay').value;
+  // 特別費・配当金・敵３・投資待機資金は支出額を予算残高に自動セット
+  if (BUDGET_AUTO_FILL_CATS.has(payType)) {
+    const balance = budgetBalance(curMonth, payType);
+    document.getElementById('f-amount').value = balance > 0 ? balance : '';
+  }
+  onAmountInput();
 }
 
 function onAmountInput() {
