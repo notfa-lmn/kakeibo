@@ -2859,9 +2859,14 @@ function aggregateIncomes(mk) {
     result.cats[cat].total += i.amount||0;
     if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + (i.amount||0);
   });
-  // MF収入（マッピング済み=収入系のものだけ加算、除外・未マッピングはスキップ）
+  // MF収入（未分類・明示的除外(null)以外はすべて加算）
   const mfMapInc = getMfCatMap();
-  (md.mfRecords || []).filter(r => r.amount > 0 && mfMapInc[r.cat1]).forEach(r => {
+  (md.mfRecords || []).filter(r => {
+    if (r.amount <= 0) return false;               // 収入のみ
+    if (r.cat1 === '未分類') return false;          // 未分類は除外
+    if (mfMapInc[r.cat1] === null) return false;   // 設定で除外指定されたもの
+    return true;
+  }).forEach(r => {
     result.total += r.amount;
     const cat = r.cat1 || '(未分類)';
     const sub = r.cat2 || '';
