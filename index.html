@@ -2801,18 +2801,7 @@ function renderScreen() {
 function aggregateExpenses(mk) {
   const md = mdata(mk);
   const result = {};
-  // 通常の支出
-  (md.expenses || []).forEach(e => {
-    const teki = e.teki || '敵２';
-    const cat  = e.category || '(未分類)';
-    const sub  = e.subcategory || '';
-    if (!result[teki]) result[teki] = { total:0, cats:{} };
-    result[teki].total += e.amount||0;
-    if (!result[teki].cats[cat]) result[teki].cats[cat] = { total:0, subs:{} };
-    result[teki].cats[cat].total += e.amount||0;
-    if (sub) result[teki].cats[cat].subs[sub] = (result[teki].cats[cat].subs[sub]||0) + (e.amount||0);
-  });
-  // 分析専用支出（anlEntries）
+  // 分析専用支出（anlEntries） ※収支一覧(expenses)は含めない
   (md.anlEntries || []).filter(e => e.type === 'expense').forEach(e => {
     const teki = e.teki || '敵２';
     const cat  = e.cat1 || '(未分類)';
@@ -2844,18 +2833,7 @@ function aggregateExpenses(mk) {
 function aggregateIncomes(mk) {
   const md = mdata(mk);
   const result = { total:0, budgetIn:0, budgetOut:0, cats:{} };
-  // 通常収入（会社売上除く）
-  (md.incomes || []).filter(i => i.category !== '会社売上').forEach(i => {
-    result.total    += i.amount||0;
-    if (i.budgetType === '予算内') result.budgetIn += i.amount||0;
-    else result.budgetOut += i.amount||0;
-    const cat = i.category || '(未分類)';
-    const sub = i.subcategory || '';
-    if (!result.cats[cat]) result.cats[cat] = { total:0, subs:{} };
-    result.cats[cat].total += i.amount||0;
-    if (sub) result.cats[cat].subs[sub] = (result.cats[cat].subs[sub]||0) + (i.amount||0);
-  });
-  // 分析専用収入（anlEntries）
+  // 分析専用収入（anlEntries） ※収支一覧(incomes)は含めない
   (md.anlEntries || []).filter(e => e.type === 'income').forEach(i => {
     result.total += i.amount||0;
     const cat = i.cat1 || '(未分類)';
@@ -2884,15 +2862,14 @@ function aggregateIncomes(mk) {
 
 const TEKI_COLORS = { '敵１':'#1565c0','敵２':'#2e7d32','敵３':'#e65100','敵４':'#b71c1c' };
 
-// 分析用の支出合計（anlEntries・mfRecords含む）
+// 分析用の支出合計（anlEntries・mfRecordsのみ ※収支一覧は含めない）
 function totalExpensesAnl(mk) {
   const md = mdata(mk);
-  const base = (md.expenses||[]).reduce((s,e)=>s+(e.amount||0), 0);
   const anl  = (md.anlEntries||[]).filter(e=>e.type==='expense').reduce((s,e)=>s+(e.amount||0), 0);
   const mfMap = getMfCatMap();
   // 除外(null)・未マッピング(undefined)はKPIから除外し、マッピング済み(string)のみ加算
   const mf   = (md.mfRecords||[]).filter(r=>r.amount<0 && mfMap[r.cat1]).reduce((s,r)=>s+Math.abs(r.amount), 0);
-  return base + anl + mf;
+  return anl + mf;
 }
 // 分析用の投資+貯蓄合計
 function totalInvestSavings(mk) {
