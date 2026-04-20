@@ -368,6 +368,28 @@
     .anl-teki-total { font-size: 16px; font-weight: 700; }
     .anl-teki-body { display: none; }
     .anl-teki-body.open { display: block; }
+    /* 明細リスト */
+    .anl-detail-toggle {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 16px; cursor: pointer; color: var(--sub); font-size: 13px;
+      border-top: 0.5px solid var(--sep); background: var(--fill); border-radius: 0 0 8px 8px;
+    }
+    .anl-detail-body { display: none; background: var(--bg); }
+    .anl-detail-body.open { display: block; }
+    .anl-detail-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 0.5px solid var(--sep);
+      cursor: pointer; gap: 10px; transition: background 0.15s;
+    }
+    .anl-detail-row:active { background: var(--fill); }
+    .anl-detail-left { flex: 1; min-width: 0; }
+    .anl-detail-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .anl-detail-meta { font-size: 11px; color: var(--sub); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+    .anl-detail-badge {
+      display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 10px;
+      background: rgba(128,128,128,0.15); color: var(--sub);
+    }
+    .anl-detail-amt { font-size: 14px; font-weight: 700; flex-shrink: 0; }
     .anl-cat-row {
       padding: 10px 16px 6px;
       border-bottom: 0.5px solid var(--sep);
@@ -2949,6 +2971,15 @@ function renderAnalytics() {
       });
       html += `</div>`;
     });
+    // 収入明細
+    const mfMapInc2 = getMfCatMap();
+    const incDetailRecs = collectDetailRecords(curMonth, (src, r) => {
+      if (src === 'income') return r.category !== '会社売上';
+      if (src === 'anl')    return r.type === 'income';
+      if (src === 'mf')     return r.amount > 0 && mfMapInc2[r.cat1];
+      return false;
+    });
+    html += buildDetailHtml('detail-inc', incDetailRecs);
     html += `</div></div></div>`;
   }
 
@@ -2991,6 +3022,15 @@ function renderAnalytics() {
       });
       html += `</div>`;
     });
+    // 敵ごとの明細
+    const mfMapTeki = getMfCatMap();
+    const tekiDetailRecs = collectDetailRecords(curMonth, (src, r) => {
+      if (src === 'expense') return (r.teki||'敵２') === teki;
+      if (src === 'anl')     return r.type === 'expense' && (r.teki||'敵２') === teki;
+      if (src === 'mf')      return r.amount < 0 && mfMapTeki[r.cat1] === teki;
+      return false;
+    });
+    html += buildDetailHtml(`detail-${blockId}`, tekiDetailRecs);
     html += `</div></div>`;
   });
   html += `</div>`;
@@ -3035,6 +3075,11 @@ function renderAnalytics() {
       });
       html += `</div>`;
     });
+    // MF未マッピング明細
+    const mfUnmapDetailRecs = collectDetailRecords(curMonth, (src, r) => {
+      return src === 'mf' && r.amount < 0 && !(r.cat1 in mfMapNow);
+    });
+    html += buildDetailHtml('detail-mf-unmap', mfUnmapDetailRecs);
     html += `</div></div></div>`;
   }
 
@@ -3672,6 +3717,82 @@ function anlToggle(id) {
   document.getElementById(id).classList.toggle('open');
   const arr = document.getElementById('arr-'+id);
   if (arr) arr.textContent = document.getElementById(id).classList.contains('open') ? '˅' : '›';
+}
+
+function anlDetailToggle(id) {
+  const body = document.getElementById(id);
+  const arr  = document.getElementById('arr-d-'+id);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (arr) arr.textContent = open ? '▼' : '▶';
+}
+
+// 明細リストHTMLを生成（records: [{date, name, sub, amount, badge, onclick}]）
+function buildDetailHtml(detailId, records) {
+  if (!records.length) return '';
+  const rows = records.map(r => {
+    const badgeHtml = r.badge ? `<span class="anl-detail-badge">${esc(r.badge)}</span>` : '';
+    const subHtml   = r.sub   ? `<span style="color:var(--sub);">${esc(r.sub)}</span>` : '';
+    return `<div class="anl-detail-row" onclick="${r.onclick}">
+      <div class="anl-detail-left">
+        <div class="anl-detail-name">${esc(r.name||'（名称なし）')}</div>
+        <div class="anl-detail-meta">${r.date} ${badgeHtml} ${subHtml}</div>
+      </div>
+      <div class="anl-detail-amt">${yen(r.amount)}</div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="anl-detail-toggle" onclick="anlDetailToggle('${detailId}')">
+      <span>明細 (${records.length}件)</span>
+      <span id="arr-d-${detailId}">▶</span>
+    </div>
+    <div class="anl-detail-body" id="${detailId}">${rows}</div>`;
+}
+
+// 各データソースの明細レコードを収集（指定tekiまたは全件）
+function collectDetailRecords(mk, filterFn) {
+  const md = mdata(mk);
+  const mfMap = getMfCatMap();
+  const records = [];
+  // 通常支出
+  (md.expenses||[]).filter(e => filterFn('expense', e)).forEach(e => {
+    records.push({
+      date: e.date, name: e.name||'',
+      sub: [e.category, e.subcategory].filter(Boolean).join(' › '),
+      amount: e.amount||0, badge: '',
+      onclick: `openEdit('${e.id}')`
+    });
+  });
+  // 分析用手入力
+  (md.anlEntries||[]).filter(e => filterFn('anl', e)).forEach(e => {
+    const amt = e.type==='income' ? e.amount : e.amount;
+    records.push({
+      date: e.date, name: [e.cat1, e.cat2].filter(Boolean).join(' › ')||'(未分類)',
+      sub: e.memo||'', amount: amt||0, badge: '分析',
+      onclick: `openAnlEntryModal('${e.id}')`
+    });
+  });
+  // MFレコード（支出）
+  (md.mfRecords||[]).forEach((r, idx) => {
+    if (!filterFn('mf', r)) return;
+    const amt = Math.abs(r.amount);
+    records.push({
+      date: r.date, name: r.name||'',
+      sub: [r.cat1, r.cat2].filter(Boolean).join(' › '),
+      amount: amt, badge: 'MF',
+      onclick: `openMfRecordModal(${idx})`
+    });
+  });
+  // 収入
+  (md.incomes||[]).filter(i => filterFn('income', i)).forEach(i => {
+    records.push({
+      date: i.date, name: i.name||'',
+      sub: [i.category, i.subcategory].filter(Boolean).join(' › '),
+      amount: i.amount||0, badge: '',
+      onclick: `openIncomeModal('${i.id}')`
+    });
+  });
+  return records.sort((a,b) => a.date.localeCompare(b.date));
 }
 
 // ═══════════════════════════════════════════════════
