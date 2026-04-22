@@ -5163,11 +5163,11 @@ function openEdit(id) {
   switchScreen('add');
 }
 
-const BUDGET_AUTO_FILL_CATS = new Set(['特別費','配当金','敵３','投資待機資金']);
+const BUDGET_AUTO_FILL_CATS = new Set(['特別費','配当金','敵３']);
 
 function onPayTypeChange() {
   const payType = document.getElementById('f-pay').value;
-  // 特別費・配当金・敵３・投資待機資金は支出額を予算残高に自動セット
+  // 特別費・配当金・敵３は支出額を予算残高に自動セット
   if (BUDGET_AUTO_FILL_CATS.has(payType)) {
     const balance = budgetBalance(curMonth, payType);
     document.getElementById('f-amount').value = balance > 0 ? balance : '';
