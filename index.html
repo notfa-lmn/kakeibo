@@ -4016,7 +4016,7 @@ function renderList() {
   const items = [
     ...(md.expenses||[]).map(e => ({...e, _type:'expense'})),
     ...(md.incomes||[]).filter(x => x.category === '会社売上').map(x => ({...x, _type:'company'})),
-  ].sort((a,b) => a.date.localeCompare(b.date));
+  ].sort((a,b) => b.date.localeCompare(a.date));
   const el = document.getElementById('expense-list');
   if (!items.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
@@ -4025,7 +4025,7 @@ function renderList() {
   const byDate = {};
   items.forEach(x => { (byDate[x.date] = byDate[x.date]||[]).push(x); });
   let html = '';
-  Object.keys(byDate).sort().forEach(date => {
+  Object.keys(byDate).sort((a,b) => b.localeCompare(a)).forEach(date => {
     const [,, day] = date.split('-');
     const wd = ['日','月','火','水','木','金','土'][new Date(date).getDay()];
     html += `<div class="date-header">${parseInt(day)}日（${wd}）</div>`;
