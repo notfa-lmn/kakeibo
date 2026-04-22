@@ -5702,12 +5702,14 @@ function handleCsv(ev) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    let text;
-    try {
-      text = new TextDecoder('shift-jis').decode(e.target.result);
-    } catch(_) {
-      text = new TextDecoder('utf-8').decode(e.target.result);
+    const buf = e.target.result;
+    // UTF-8を優先し、置換文字（文字化け）があればShift-JISにフォールバック
+    let text = new TextDecoder('utf-8').decode(buf);
+    if (text.includes('\ufffd')) {
+      try { text = new TextDecoder('shift-jis').decode(buf); } catch(_) {}
     }
+    // BOM（\ufeff）を除去
+    text = text.replace(/^\ufeff/, '');
     processCsv(text);
   };
   reader.readAsArrayBuffer(file);
