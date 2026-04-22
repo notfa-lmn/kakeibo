@@ -1200,6 +1200,11 @@
         <input type="checkbox" id="rec-no-cc" style="width:18px;height:18px;accent-color:var(--primary);">
         <span style="font-size:14px;color:var(--text);">クレジットカード対象外（銀行引落・現金）</span>
       </label>
+      <div class="fg">
+        <label>振込金額（円）</label>
+        <input class="fi" type="number" id="rec-transfer-amt" placeholder="0">
+        <div class="set-note">CC対象外の場合に楽天銀行残高（理論値）へ加算</div>
+      </div>
       <button class="btn btn-p" onclick="saveRec()">保存する</button>
       <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
     </div>
@@ -1347,6 +1352,11 @@
         <input type="checkbox" id="rec3-no-cc" style="width:18px;height:18px;accent-color:var(--primary);">
         <span style="font-size:14px;color:var(--text);">クレジットカード対象外（銀行引落・現金）</span>
       </label>
+      <div class="fg">
+        <label>振込金額（円）</label>
+        <input class="fi" type="number" id="rec3-transfer-amt" placeholder="0">
+        <div class="set-note">CC対象外の場合に楽天銀行残高（理論値）へ加算</div>
+      </div>
       <button class="btn btn-p" onclick="saveRecTeki3()">保存する</button>
       <button class="btn btn-d" id="rec3-del-btn" style="display:none;" onclick="deleteRecTeki3()">削除する</button>
     </div>
@@ -2131,7 +2141,7 @@ function generateRecurring(mk) {
       category: r.category||'',
       subcategory: '',
       budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
-      transferAmt: 0,
+      transferAmt: r.transferAmt||0,
       noCc: !!r.noCc,
       nmType: null, nmAmt: null,
       auto: true
@@ -4334,7 +4344,7 @@ function generateRecurringTeki3(mk) {
       category: r.category||'',
       subcategory: '',
       budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
-      transferAmt: 0,
+      transferAmt: r.transferAmt||0,
       noCc: !!r.noCc,
       nmType: null, nmAmt: null,
       auto: true
@@ -4458,6 +4468,7 @@ function openRecTeki3Modal(id) {
     document.getElementById('rec3-group').value = r.group||'';
     document.getElementById('rec3-pay').value = r.payType||'';
     document.getElementById('rec3-no-cc').checked = !!r.noCc;
+    document.getElementById('rec3-transfer-amt').value = r.transferAmt||'';
     selRec3SatVal = r.sat||'○';
     document.getElementById('rec3-del-btn').style.display = '';
   } else {
@@ -4471,6 +4482,7 @@ function openRecTeki3Modal(id) {
     document.getElementById('rec3-group').value = '';
     document.getElementById('rec3-pay').value = '';
     document.getElementById('rec3-no-cc').checked = false;
+    document.getElementById('rec3-transfer-amt').value = '';
     selRec3SatVal = '○';
     document.getElementById('rec3-del-btn').style.display = 'none';
   }
@@ -4498,6 +4510,7 @@ function saveRecTeki3() {
     payType: document.getElementById('rec3-pay').value||'',
     group: document.getElementById('rec3-group').value||'',
     noCc: document.getElementById('rec3-no-cc').checked,
+    transferAmt: parseFloat(document.getElementById('rec3-transfer-amt').value)||0,
     sat: selRec3SatVal,
     active: true
   };
@@ -5564,6 +5577,7 @@ function openRecModal(id) {
     document.getElementById('rec-group').value = r.group||'';
     document.getElementById('rec-freq').value = r.freq||'';
     document.getElementById('rec-no-cc').checked = !!r.noCc;
+    document.getElementById('rec-transfer-amt').value = r.transferAmt||'';
     selRecSatVal = r.sat||'○';
     document.getElementById('rec-del-btn').style.display = '';
   } else {
@@ -5576,6 +5590,7 @@ function openRecModal(id) {
     document.getElementById('rec-group').value = '';
     document.getElementById('rec-freq').value = '';
     document.getElementById('rec-no-cc').checked = false;
+    document.getElementById('rec-transfer-amt').value = '';
     selRecSatVal = '○';
     document.getElementById('rec-del-btn').style.display = 'none';
   }
@@ -5601,6 +5616,7 @@ function saveRec() {
     group: document.getElementById('rec-group').value||'',
     freq: document.getElementById('rec-freq').value||'',
     noCc: document.getElementById('rec-no-cc').checked,
+    transferAmt: parseFloat(document.getElementById('rec-transfer-amt').value)||0,
     sat: selRecSatVal,
     active: true
   };
