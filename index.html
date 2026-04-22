@@ -2042,8 +2042,8 @@ function fmtYenVal(n) { return n ? (n<0?'-¥':'¥') + Math.abs(Math.round(n)).to
 function fmtInput(el) { el.value = fmtYenVal(parseYen(el.value)); }
 function unfmtInput(el) { const n=parseYen(el.value); el.value = n!==0 ? n : ''; }
 function roundUp500(n) { return n <= 0 ? 0 : Math.ceil(n / 500) * 500; }
-// 特別費・配当金・敵３は500円切り上げなし（支出額＝支払元予算）
-const NO_ROUNDUP_CATS = new Set(['特別費','配当金','敵３']);
+// 特別費・配当金・敵３・投資待機資金は500円切り上げなし（支出額＝支払元予算）
+const NO_ROUNDUP_CATS = new Set(['特別費','配当金','敵３','投資待機資金']);
 function calcBudgetAlloc(amount, payType) {
   return NO_ROUNDUP_CATS.has(payType) ? (amount <= 0 ? 0 : amount) : roundUp500(amount);
 }
@@ -5163,15 +5163,8 @@ function openEdit(id) {
   switchScreen('add');
 }
 
-const BUDGET_AUTO_FILL_CATS = new Set(['特別費','配当金','敵３']);
-
 function onPayTypeChange() {
-  const payType = document.getElementById('f-pay').value;
-  // 特別費・配当金・敵３は支出額を予算残高に自動セット
-  if (BUDGET_AUTO_FILL_CATS.has(payType)) {
-    const balance = budgetBalance(curMonth, payType);
-    document.getElementById('f-amount').value = balance > 0 ? balance : '';
-  }
+  // 支払元予算は onAmountInput() が支出額から再計算（NO_ROUNDUP_CATSなら支出額と同額）
   onAmountInput();
 }
 
