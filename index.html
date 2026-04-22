@@ -833,39 +833,10 @@
       </div>
       <div class="ocr-status-msg" id="ocr-status"></div>
     </div>
-    <!-- Amount + Teki -->
-    <div class="form-row">
-      <div class="fg">
-        <label>支出額（円）</label>
-        <input class="fi" type="number" id="f-amount" placeholder="0" oninput="onAmountInput()">
-      </div>
-      <div class="fg">
-        <label>敵種別</label>
-        <select class="fs" id="f-teki" onchange="onTekiChange()">
-          <option value="敵１">敵１（固定月次）</option>
-          <option value="敵２" selected>敵２（変動月次）</option>
-          <option value="敵３">敵３（固定不定期）</option>
-          <option value="敵４">敵４（変動不定期）</option>
-          <option value="税・社会保障">税・社会保障</option>
-          <option value="投資">投資</option>
-          <option value="貯蓄">貯蓄</option>
-        </select>
-      </div>
-    </div>
-    <!-- Category / Subcategory -->
-    <div class="form-row">
-      <div class="fg" id="fg-category">
-        <label>大カテゴリ</label>
-        <select class="fs" id="f-category" onchange="onCategoryChange()">
-          <option value="">選択</option>
-        </select>
-      </div>
-      <div class="fg" id="fg-subcategory" style="display:none;">
-        <label>小カテゴリ</label>
-        <select class="fs" id="f-subcategory">
-          <option value="">選択</option>
-        </select>
-      </div>
+    <!-- Amount -->
+    <div class="fg">
+      <label>支出額（円）</label>
+      <input class="fi" type="number" id="f-amount" placeholder="0" oninput="onAmountInput()">
     </div>
     <!-- Payment type -->
     <div class="fg">
@@ -1132,17 +1103,9 @@
       <button class="sheet-close" onclick="closeRecModal()">✕</button>
     </div>
     <div class="form-wrap" style="padding-top:0;">
-      <div class="form-row">
-        <div class="fg">
-          <label>カテゴリ</label>
-          <select class="fs" id="rec-category" onchange="onRecCategoryChange()">
-            <option value="">選択（任意）</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label>費目</label>
-          <input class="fi" type="text" id="rec-name" placeholder="例：家賃">
-        </div>
+      <div class="fg">
+        <label>費目</label>
+        <input class="fi" type="text" id="rec-name" placeholder="例：家賃">
       </div>
       <div class="form-row">
         <div class="fg">
@@ -1275,17 +1238,9 @@
       <button class="sheet-close" onclick="closeRecTeki3Modal()">✕</button>
     </div>
     <div class="form-wrap" style="padding-top:0;">
-      <div class="form-row">
-        <div class="fg">
-          <label>カテゴリ</label>
-          <select class="fs" id="rec3-category" onchange="onRec3CategoryChange()">
-            <option value="">選択（任意）</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label>費目</label>
-          <input class="fi" type="text" id="rec3-name" placeholder="例：Amex年会費">
-        </div>
+      <div class="fg">
+        <label>費目</label>
+        <input class="fi" type="text" id="rec3-name" placeholder="例：Amex年会費">
       </div>
       <div class="form-row">
         <div class="fg">
@@ -2415,39 +2370,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// ═══════════════════════════════════════════════════
-//  EXPENSE CATEGORY CASCADE
-// ═══════════════════════════════════════════════════
-function onTekiChange() {
-  const teki = document.getElementById('f-teki').value;
-  const catSel = document.getElementById('f-category');
-  const subSel = document.getElementById('f-subcategory');
-  const subFg  = document.getElementById('fg-subcategory');
-  catSel.innerHTML = '<option value="">選択</option>';
-  subSel.innerHTML = '<option value="">選択</option>';
-  subFg.style.display = 'none';
-  getECItems(teki).forEach(item => {
-    catSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
-  });
-}
-
-function onCategoryChange() {
-  const teki = document.getElementById('f-teki').value;
-  const cat  = document.getElementById('f-category').value;
-  const subSel = document.getElementById('f-subcategory');
-  const subFg  = document.getElementById('fg-subcategory');
-  subSel.innerHTML = '<option value="">選択</option>';
-  subFg.style.display = 'none';
-  if (teki !== '敵２' || !cat) return;
-  const subs = getECSubItems(cat);
-  if (!subs.length) return;
-  subFg.style.display = '';
-  subs.forEach(item => {
-    subSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
-  });
-  const nameEl = document.getElementById('f-name');
-  if (!nameEl.value) nameEl.value = cat;
-}
 
 // ═══════════════════════════════════════════════════
 //  INCOME
@@ -4434,22 +4356,6 @@ function toggleRecTeki3Group(grpKey) {
 let editRecTeki3Id = null;
 let selRec3SatVal = '○';
 
-function populateRec3Category(selectedVal) {
-  const sel = document.getElementById('rec3-category');
-  sel.innerHTML = '<option value="">選択（任意）</option>';
-  const items = getECItems('敵３');
-  items.forEach(item => {
-    const opt = document.createElement('option');
-    opt.value = item; opt.textContent = item;
-    if (item === selectedVal) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
-function onRec3CategoryChange() {
-  const cat = document.getElementById('rec3-category').value;
-  const nameEl = document.getElementById('rec3-name');
-  if (cat && !nameEl.value) nameEl.value = cat;
-}
 
 function openRecTeki3Modal(id) {
   editRecTeki3Id = id;
@@ -4459,7 +4365,6 @@ function openRecTeki3Modal(id) {
     const r = (D.settings.recurringTeki3||[]).find(x => x.id === id);
     if (!r) return;
     document.getElementById('rec-teki3-modal-title').textContent = '定期支出（敵３）を編集';
-    populateRec3Category(r.category||'');
     document.getElementById('rec3-name').value = r.name||'';
     document.getElementById('rec3-amount').value = r.amount||'';
     document.getElementById('rec3-first-month').value = r.firstYearMonth||todayMk;
@@ -4473,7 +4378,6 @@ function openRecTeki3Modal(id) {
     document.getElementById('rec3-del-btn').style.display = '';
   } else {
     document.getElementById('rec-teki3-modal-title').textContent = '定期支出（敵３）を追加';
-    populateRec3Category('');
     document.getElementById('rec3-name').value = '';
     document.getElementById('rec3-amount').value = '';
     document.getElementById('rec3-first-month').value = todayMk;
@@ -4506,7 +4410,6 @@ function saveRecTeki3() {
   const rec = {
     name, amount, day, firstYearMonth,
     intervalMonths: parseInt(document.getElementById('rec3-interval').value)||12,
-    category: document.getElementById('rec3-category').value||'',
     payType: document.getElementById('rec3-pay').value||'',
     group: document.getElementById('rec3-group').value||'',
     noCc: document.getElementById('rec3-no-cc').checked,
@@ -5118,7 +5021,6 @@ function resetForm() {
   document.getElementById('f-date').value = todayStr();
   document.getElementById('f-name').value = '';
   document.getElementById('f-amount').value = '';
-  document.getElementById('f-teki').value = '敵２';
   document.getElementById('f-pay').value = '';
   document.getElementById('transfer-disp').value = '';
   document.getElementById('f-transfer-amt').value = '';
@@ -5136,11 +5038,6 @@ function resetForm() {
   document.getElementById('submit-btn').textContent = '支出を記録';
   document.getElementById('cancel-btn').style.display = 'none';
   document.getElementById('delete-btn').style.display = 'none';
-  // カテゴリリセット
-  document.getElementById('f-category').innerHTML = '<option value="">選択</option>';
-  document.getElementById('f-subcategory').innerHTML = '<option value="">選択</option>';
-  document.getElementById('fg-subcategory').style.display = 'none';
-  onTekiChange();
 }
 
 function openEdit(id) {
@@ -5151,13 +5048,6 @@ function openEdit(id) {
   document.getElementById('f-date').value = e.date;
   document.getElementById('f-name').value = e.name;
   document.getElementById('f-amount').value = e.amount;
-  document.getElementById('f-teki').value = e.teki||'敵２';
-  onTekiChange();
-  if (e.category) {
-    document.getElementById('f-category').value = e.category;
-    onCategoryChange();
-    if (e.subcategory) document.getElementById('f-subcategory').value = e.subcategory;
-  }
   document.getElementById('f-pay').value = e.payType||'';
   document.getElementById('transfer-disp').value = e.budgetAlloc != null ? e.budgetAlloc : (e.transfer || '');
   document.getElementById('f-transfer-amt').value = e.transferAmt||'';
@@ -5208,9 +5098,6 @@ function submitExpense() {
   const nmAmt = nmType ? (parseFloat(document.getElementById('f-nm-amt').value)||null) : null;
   const expObj = {
     date, name, amount,
-    teki: document.getElementById('f-teki').value,
-    category: document.getElementById('f-category').value||'',
-    subcategory: document.getElementById('f-subcategory').value||'',
     payType: document.getElementById('f-pay').value,
     sat: selSatVal,
     budgetAlloc: parseFloat(document.getElementById('transfer-disp').value) || calcBudgetAlloc(amount, document.getElementById('f-pay').value),
@@ -5282,15 +5169,6 @@ async function handleFabReceipt(event) {
       onAmountInput();
     }
     if (inferred.name) document.getElementById('f-name').value = inferred.name;
-    document.getElementById('f-teki').value = inferred.teki || '敵２';
-    onTekiChange();
-    if (inferred.category) {
-      document.getElementById('f-category').value = inferred.category;
-      onCategoryChange();
-      if (inferred.subcategory) {
-        document.getElementById('f-subcategory').value = inferred.subcategory;
-      }
-    }
     // レシートプレビューを表示
     const reader = new FileReader();
     reader.onload = e => {
@@ -5536,32 +5414,6 @@ function importData(event) {
 // ═══════════════════════════════════════════════════
 //  RECURRING MODAL
 // ═══════════════════════════════════════════════════
-function populateRecCategory(selectedVal) {
-  const sel = document.getElementById('rec-category');
-  sel.innerHTML = '<option value="">選択（任意）</option>';
-  const groups = ['敵１','税・社会保障','投資','貯蓄'];
-  groups.forEach(grp => {
-    const items = getECItems(grp);
-    if (!items.length) return;
-    const og = document.createElement('optgroup');
-    og.label = grp;
-    items.forEach(item => {
-      const opt = document.createElement('option');
-      opt.value = item;
-      opt.textContent = item;
-      if (item === selectedVal) opt.selected = true;
-      og.appendChild(opt);
-    });
-    sel.appendChild(og);
-  });
-}
-
-function onRecCategoryChange() {
-  const cat = document.getElementById('rec-category').value;
-  const nameEl = document.getElementById('rec-name');
-  if (cat && !nameEl.value) nameEl.value = cat;
-}
-
 function openRecModal(id) {
   editRecId = id;
   const modal = document.getElementById('rec-modal');
@@ -5569,7 +5421,6 @@ function openRecModal(id) {
     const r = (D.settings.recurring||[]).find(x => x.id === id);
     if (!r) return;
     document.getElementById('rec-modal-title').textContent = '定期支出を編集';
-    populateRecCategory(r.category||'');
     document.getElementById('rec-name').value = r.name;
     document.getElementById('rec-amount').value = r.amount;
     document.getElementById('rec-day').value = r.day;
@@ -5582,7 +5433,6 @@ function openRecModal(id) {
     document.getElementById('rec-del-btn').style.display = '';
   } else {
     document.getElementById('rec-modal-title').textContent = '定期支出を追加';
-    populateRecCategory('');
     document.getElementById('rec-name').value = '';
     document.getElementById('rec-amount').value = '';
     document.getElementById('rec-day').value = '';
@@ -5611,7 +5461,6 @@ function saveRec() {
   if (!name || amount < 0 || day < 1 || day > 31) { alert('費目・金額・日付を正しく入力してください'); return; }
   const rec = {
     name, amount, day,
-    category: document.getElementById('rec-category').value||'',
     payType: document.getElementById('rec-pay').value,
     group: document.getElementById('rec-group').value||'',
     freq: document.getElementById('rec-freq').value||'',
