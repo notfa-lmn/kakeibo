@@ -5550,17 +5550,7 @@ function handleCsv(ev) {
   const file = ev.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
-    const buf = e.target.result;
-    // UTF-8を優先し、置換文字（文字化け）があればShift-JISにフォールバック
-    let text = new TextDecoder('utf-8').decode(buf);
-    if (text.includes('\ufffd')) {
-      try { text = new TextDecoder('shift-jis').decode(buf); } catch(_) {}
-    }
-    // BOM（\ufeff）を除去
-    text = text.replace(/^\ufeff/, '');
-    processCsv(text);
-  };
+  reader.onload = e => { processCsv(decodeCsvBuf(e.target.result)); };
   reader.readAsArrayBuffer(file);
 }
 
@@ -5658,6 +5648,13 @@ function parseCsvLine(line) {
 // ═══════════════════════════════════════════════════
 //  DRAG AND DROP — CSV
 // ═══════════════════════════════════════════════════
+// UTF-8 BOM付きCSV対応デコーダ（楽天e-NAVI）
+function decodeCsvBuf(buf) {
+  const utf8 = new TextDecoder('utf-8').decode(buf).replace(/^\ufeff/, '');
+  if (!utf8.includes('\ufffd')) return utf8; // 有効なUTF-8はそのまま使用
+  try { return new TextDecoder('shift-jis').decode(buf); } catch(_) { return utf8; }
+}
+
 const dz = document.getElementById('drop-zone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('over'));
@@ -5666,12 +5663,7 @@ dz.addEventListener('drop', e => {
   const file = e.dataTransfer.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
-    let text;
-    try { text = new TextDecoder('shift-jis').decode(ev.target.result); }
-    catch(_) { text = new TextDecoder('utf-8').decode(ev.target.result); }
-    processCsv(text);
-  };
+  reader.onload = ev => { processCsv(decodeCsvBuf(ev.target.result)); };
   reader.readAsArrayBuffer(file);
 });
 
