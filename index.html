@@ -536,6 +536,19 @@
     .anl-kpi-label { font-size: 11px; color: var(--sub); margin-bottom: 3px; }
     .anl-kpi-value { font-size: 18px; font-weight: 700; }
 
+    /* ── KPI TILES ── */
+    .kpi-tile { background:var(--card); border-radius:12px; padding:12px 14px 14px; margin-bottom:8px; }
+    .kpi-tile-title { font-size:11px; color:var(--sub); text-align:center; margin-bottom:2px; letter-spacing:0.5px; }
+    .kpi-tile-pct { font-size:38px; font-weight:800; color:var(--success); text-align:center; margin:2px 0 10px; line-height:1; }
+    .kpi-tile-stats { display:flex; gap:4px; flex-wrap:wrap; justify-content:space-evenly; }
+    .kpi-tile-stat { text-align:center; min-width:50px; }
+    .kpi-tile-stat-lbl { font-size:10px; color:var(--sub); margin-bottom:1px; }
+    .kpi-tile-stat-val { font-size:12px; font-weight:600; }
+
+    /* ── PIE CHART ── */
+    .pie-wrap { background:var(--card); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:12px; }
+    .pie-legend { flex:1; min-width:0; }
+
     /* ── REC APPLY BUTTON ── */
     .rec-apply-btn {
       font-size: 12px; font-weight: 600; font-family: inherit;
@@ -2809,6 +2822,146 @@ function totalInvestSavings(mk) {
   return ((agg['投資']||{}).total||0) + ((agg['貯蓄']||{}).total||0);
 }
 
+// ═══════════════════════════════════════════════════
+//  ANALYTICS HELPERS — PIE & TILES
+// ═══════════════════════════════════════════════════
+const PIE_PALETTE = [
+  '#0a84ff','#30d158','#ff9f0a','#ff453a','#bf5af2',
+  '#64d2ff','#ff6b6b','#ffd60a','#32ade6','#6ac4dc',
+  '#ff9500','#ac8e68','#5e5ce6','#00c7be'
+];
+const TEKI_PIE_COLORS = {
+  '敵１':'#1565c0','敵２':'#2e7d32','敵３':'#e65100','敵４':'#b71c1c',
+  '税・社会保障':'#7c4dff','投資':'#0a84ff','貯蓄':'#30d158'
+};
+
+function buildPieChart(data) {
+  // data = [{label, value, color?}, ...]
+  const items = data.filter(d => d.value > 0);
+  if (!items.length) return '';
+  const total = items.reduce((s, d) => s + d.value, 0);
+  const cx = 70, cy = 70, r = 64;
+  let paths = '';
+  let ang = -Math.PI / 2;
+  items.forEach((d, i) => {
+    const col = d.color || PIE_PALETTE[i % PIE_PALETTE.length];
+    const slice = (d.value / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(ang), y1 = cy + r * Math.sin(ang);
+    ang += slice;
+    const x2 = cx + r * Math.cos(ang), y2 = cy + r * Math.sin(ang);
+    const la = slice > Math.PI ? 1 : 0;
+    paths += `<path d="M${cx} ${cy}L${x1.toFixed(1)} ${y1.toFixed(1)}A${r} ${r} 0 ${la} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}Z" fill="${col}" stroke="var(--bg)" stroke-width="2"/>`;
+  });
+  ang = -Math.PI / 2;
+  const legend = items.map((d, i) => {
+    const col = d.color || PIE_PALETTE[i % PIE_PALETTE.length];
+    const pct = Math.round(d.value / total * 100);
+    return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
+      <div style="width:9px;height:9px;border-radius:2px;background:${col};flex-shrink:0;"></div>
+      <span style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.label)}</span>
+      <span style="font-size:11px;color:var(--sub);flex-shrink:0;">${pct}%</span>
+      <span style="font-size:11px;color:var(--text);flex-shrink:0;margin-left:2px;">${yen(d.value)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="pie-wrap">
+    <svg width="140" height="140" viewBox="0 0 140 140" style="flex-shrink:0;">${paths}</svg>
+    <div class="pie-legend">${legend}</div>
+  </div>`;
+}
+
+function buildKpiTile(title, pct, stats) {
+  const pctStr = pct !== null ? `${pct}%` : '—';
+  const statsHtml = stats.map(s =>
+    `<div class="kpi-tile-stat">
+      <div class="kpi-tile-stat-lbl">${s.label}</div>
+      <div class="kpi-tile-stat-val"${s.color ? ` style="color:${s.color}"` : ''}>${s.value}</div>
+    </div>`
+  ).join('');
+  return `<div class="kpi-tile">
+    <div class="kpi-tile-title">${title}</div>
+    <div class="kpi-tile-pct">${pctStr}</div>
+    <div class="kpi-tile-stats">${statsHtml}</div>
+  </div>`;
+}
+
+// 月次/年次共通のKPIタイル群を生成
+function buildKpiTiles(incTotal, expTotal, investTotal, savTotal) {
+  const investSavTotal = investTotal + savTotal;
+  const profit = incTotal - expTotal - investSavTotal;
+  const r = (v) => incTotal > 0 ? Math.round(v / incTotal * 100) : null;
+  let html = '';
+  if (incTotal > 0) {
+    html += buildKpiTile('支出率', r(expTotal), [
+      { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
+      { label:'支出合計', value: yen(expTotal), color:'var(--danger)' }
+    ]);
+    html += buildKpiTile('貯蓄率', r(savTotal), [
+      { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
+      { label:'貯蓄', value: yen(savTotal) }
+    ]);
+    html += buildKpiTile('投資率', r(investTotal), [
+      { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
+      { label:'投資', value: yen(investTotal) }
+    ]);
+    html += buildKpiTile('投資＋貯蓄率', r(investSavTotal), [
+      { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
+      { label:'投資＋貯蓄', value: yen(investSavTotal) }
+    ]);
+    html += buildKpiTile('利益率', r(profit), [
+      { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
+      { label:'支出合計（全体）', value: yen(expTotal + investSavTotal), color:'var(--danger)' },
+      { label:'利益', value: yenSigned(profit), color: profit >= 0 ? 'var(--success)' : 'var(--danger)' }
+    ]);
+  }
+  return html;
+}
+
+// 月次/年次共通の円グラフ群を生成
+function buildPieCharts(expAgg, sectionTitle) {
+  const tekiOrder = ['敵１','敵２','敵３','敵４','税・社会保障','投資','貯蓄'];
+
+  // ① 全体バランス（敵別）
+  const overallData = tekiOrder.map(t => ({
+    label: t, value: (expAgg[t]||{}).total||0, color: TEKI_PIE_COLORS[t]
+  })).filter(d => d.value > 0);
+
+  // ② 支出詳細（敵１〜敵４・税社保のカテゴリ）
+  const expCatMap = {};
+  ['敵１','敵２','敵３','敵４','税・社会保障'].forEach(t => {
+    Object.entries((expAgg[t]||{}).cats||{}).forEach(([cat, cv]) => {
+      expCatMap[cat] = (expCatMap[cat]||0) + cv.total;
+    });
+  });
+  const expCatData = Object.entries(expCatMap).sort((a,b)=>b[1]-a[1])
+    .map(([label, value], i) => ({ label, value }));
+
+  // ③ 投資・貯蓄詳細
+  const invSavCatMap = {};
+  ['投資','貯蓄'].forEach(t => {
+    Object.entries((expAgg[t]||{}).cats||{}).forEach(([cat, cv]) => {
+      invSavCatMap[`${t}:${cat}`] = { label: cat, value: cv.total,
+        color: t === '貯蓄' ? '#30d158' : undefined };
+    });
+  });
+  const invSavData = Object.values(invSavCatMap).sort((a,b)=>b.value-a.value);
+
+  let html = `<div class="anl-section"><div class="anl-section-title">${sectionTitle}円グラフ</div>`;
+  if (overallData.length) {
+    html += `<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">全体バランス（敵種別）</div>`;
+    html += buildPieChart(overallData);
+  }
+  if (expCatData.length) {
+    html += `<div style="font-size:12px;color:var(--sub);margin:12px 0 6px;">支出内訳（カテゴリ別）</div>`;
+    html += buildPieChart(expCatData);
+  }
+  if (invSavData.length) {
+    html += `<div style="font-size:12px;color:var(--sub);margin:12px 0 6px;">投資・貯蓄内訳</div>`;
+    html += buildPieChart(invSavData);
+  }
+  html += `</div>`;
+  return html;
+}
+
 function renderAnalytics() {
   // ナビ切り替え
   document.getElementById('anl-month-nav').style.display = (anlMode === 'monthly' || anlMode === 'mf') ? '' : 'none';
@@ -2824,13 +2977,8 @@ function renderAnalytics() {
   // 支出合計は敵１〜４・税社保のみ（貯蓄・投資は除外）
   const expTotal = totalExpensesAnl(curMonth) - investSav;
   const incTotal = incAgg.total;
-  // 支出率・貯蓄率（収入ベース）
-  const expRate  = incTotal > 0 ? Math.round(expTotal / incTotal * 100) : null;
-  const savRate  = incTotal > 0 ? Math.round(investSav / incTotal * 100) : null;
-  const net = incTotal - expTotal;
-
-  const pctBadge = (v, color) => v !== null
-    ? `<span style="font-size:12px;font-weight:600;color:${color};">${v}%</span>` : '';
+  const investTotal = (expAgg['投資']||{}).total||0;
+  const savTotal    = (expAgg['貯蓄']||{}).total||0;
 
   let html = `
     <div class="anl-tab-row">
@@ -2840,29 +2988,10 @@ function renderAnalytics() {
     </div>
     <button class="mf-add-btn" onclick="openAnlEntryModal(null)">＋ 分析用データを手入力（収支一覧に表示されません）</button>`;
 
-  // ── KPIサマリー ──
-  html += `
-    <div class="anl-section">
-      <div class="anl-section-title">月次サマリー</div>
-      <div class="anl-summary-grid">
-        <div class="anl-kpi">
-          <div class="anl-kpi-label">収入合計</div>
-          <div class="anl-kpi-value" style="color:var(--success);">${yen(incTotal)}</div>
-        </div>
-        <div class="anl-kpi">
-          <div class="anl-kpi-label">支出合計 ${pctBadge(expRate,'var(--danger)')}</div>
-          <div class="anl-kpi-value" style="color:var(--danger);">${yen(expTotal)}</div>
-        </div>
-        <div class="anl-kpi">
-          <div class="anl-kpi-label">投資＋貯蓄 ${pctBadge(savRate,'var(--primary)')}</div>
-          <div class="anl-kpi-value" style="color:var(--primary);">${yen(investSav)}</div>
-        </div>
-        <div class="anl-kpi">
-          <div class="anl-kpi-label">収支</div>
-          <div class="anl-kpi-value" style="color:${net>=0?'var(--success)':'var(--danger)'}">${yenSigned(net)}</div>
-        </div>
-      </div>
-    </div>`;
+  // ── KPIタイル ──
+  html += `<div class="anl-section"><div class="anl-section-title">月次サマリー</div>`;
+  html += buildKpiTiles(incTotal, expTotal, investTotal, savTotal);
+  html += `</div>`;
 
   // ── 収入内訳 ──
   if (incTotal > 0) {
@@ -2954,6 +3083,9 @@ function renderAnalytics() {
     html += `</div></div>`;
   });
   html += `</div>`;
+
+  // ── 円グラフ ──
+  html += buildPieCharts(expAgg, '月次');
 
   // ── MFデータ支出内訳（未マッピング分のみ） ──
   const mfRecs = mdata(curMonth).mfRecords || [];
@@ -3127,15 +3259,18 @@ function renderAnnualAnalytics() {
     const expAgg = aggregateExpenses(mk);
     const incAgg = aggregateIncomes(mk);
     const investSav = totalInvestSavings(mk);
-    // 支出合計は敵１〜４・税社保のみ（貯蓄・投資は除外）
     const expTotal = totalExpensesAnl(mk) - investSav;
     const incTotal = incAgg.total;
-    return { mk, expTotal, incTotal, investSav, expAgg };
+    const investTotal = (expAgg['投資']||{}).total||0;
+    const savTotal    = (expAgg['貯蓄']||{}).total||0;
+    return { mk, expTotal, incTotal, investSav, expAgg, incAgg, investTotal, savTotal };
   });
 
-  const totalExp = monthStats.reduce((s,m)=>s+m.expTotal, 0);
-  const totalInc = monthStats.reduce((s,m)=>s+m.incTotal, 0);
-  const totalInvSav = monthStats.reduce((s,m)=>s+m.investSav, 0);
+  const totalExp      = monthStats.reduce((s,m)=>s+m.expTotal, 0);
+  const totalInc      = monthStats.reduce((s,m)=>s+m.incTotal, 0);
+  const totalInvSav   = monthStats.reduce((s,m)=>s+m.investSav, 0);
+  const totalInvTotal = monthStats.reduce((s,m)=>s+m.investTotal, 0);
+  const totalSavTotal = monthStats.reduce((s,m)=>s+m.savTotal, 0);
   const avgExp = Math.round(totalExp / n);
   const avgInc = Math.round(totalInc / n);
   const avgInvSav = Math.round(totalInvSav / n);
@@ -3143,6 +3278,36 @@ function renderAnnualAnalytics() {
   const totalSavRate = totalInc > 0 ? Math.round(totalInvSav/totalInc*100) : null;
   const avgExpRate   = avgInc  > 0 ? Math.round(avgExp/avgInc*100)     : null;
   const avgSavRate   = avgInc  > 0 ? Math.round(avgInvSav/avgInc*100)  : null;
+
+  // 年間の合算 expAgg（円グラフ用）
+  const tekiOrderAll = ['敵１','敵２','敵３','敵４','税・社会保障','投資','貯蓄'];
+  const yearExpAgg = {};
+  monthStats.forEach(m => {
+    tekiOrderAll.forEach(t => {
+      const td = m.expAgg[t];
+      if (!td) return;
+      if (!yearExpAgg[t]) yearExpAgg[t] = { total:0, cats:{} };
+      yearExpAgg[t].total += td.total;
+      Object.entries(td.cats).forEach(([cat, cv]) => {
+        if (!yearExpAgg[t].cats[cat]) yearExpAgg[t].cats[cat] = { total:0, subs:{} };
+        yearExpAgg[t].cats[cat].total += cv.total;
+      });
+    });
+  });
+
+  // 年間の合算 incAgg（収入内訳用）
+  const yearIncCats = {};
+  let yearIncTotal = 0;
+  monthStats.forEach(m => {
+    yearIncTotal += m.incTotal;
+    Object.entries(m.incAgg.cats).forEach(([cat, cv]) => {
+      if (!yearIncCats[cat]) yearIncCats[cat] = { total:0, subs:{} };
+      yearIncCats[cat].total += cv.total;
+      Object.entries(cv.subs).forEach(([sub, amt]) => {
+        yearIncCats[cat].subs[sub] = (yearIncCats[cat].subs[sub]||0) + amt;
+      });
+    });
+  });
 
   const pct = (v, color) => v !== null ? `<span style="font-size:11px;font-weight:600;color:${color};margin-left:4px;">${v}%</span>` : '';
 
@@ -3161,6 +3326,11 @@ function renderAnnualAnalytics() {
     document.getElementById('anl-body').innerHTML = html;
     return;
   }
+
+  // ── KPIタイル ──
+  html += `<div class="anl-section"><div class="anl-section-title">年間サマリー（${n}ヶ月分）</div>`;
+  html += buildKpiTiles(totalInc, totalExp, totalInvTotal, totalSavTotal);
+  html += `</div>`;
 
   // ── 年間KPI（合計） ──
   html += `<div class="mf-section-title">年間合計（${activeMonths.length}ヶ月分）</div>
@@ -3251,6 +3421,40 @@ function renderAnnualAnalytics() {
       html += `</div></div>`;
     });
   }
+
+  // ── 収入内訳（年間） ──
+  if (yearIncTotal > 0) {
+    html += `<div class="anl-section"><div class="anl-section-title">収入内訳（年間合計）</div><div class="anl-teki-block">
+      <div class="anl-teki-hdr" onclick="anlToggle('anl-yr-inc')">
+        <div class="anl-teki-hdr-left">
+          <span style="font-size:18px;">💰</span>
+          <span class="anl-teki-name">収入合計</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="anl-teki-total" style="color:var(--success);">${yen(yearIncTotal)}</span>
+          <span style="color:var(--sub);font-size:14px;" id="arr-anl-yr-inc">›</span>
+        </div>
+      </div>
+      <div class="anl-teki-body" id="anl-yr-inc">`;
+    Object.entries(yearIncCats).sort((a,b)=>b[1].total-a[1].total).forEach(([cat, cv]) => {
+      const p = yearIncTotal > 0 ? Math.min(100, cv.total/yearIncTotal*100) : 0;
+      html += `<div class="anl-cat-row">
+        <div class="anl-cat-top">
+          <span class="anl-cat-name">${esc(cat)}</span>
+          <span class="anl-cat-amt" style="color:var(--success);">${yen(cv.total)}</span>
+        </div>
+        <div class="anl-bar-track"><div class="anl-bar-fill" style="width:${p}%;background:var(--success);"></div></div>`;
+      Object.entries(cv.subs).sort((a,b)=>b[1]-a[1]).forEach(([sub, amt]) => {
+        const avg = Math.round(amt / n);
+        html += `<div class="anl-sub-row"><span>${esc(sub)}</span><span>${yen(amt)} <span style="color:var(--sub);font-size:10px;">月平均 ${yen(avg)}</span></span></div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div></div></div>`;
+  }
+
+  // ── 円グラフ（年間） ──
+  html += buildPieCharts(yearExpAgg, '年間');
 
   document.getElementById('anl-body').innerHTML = html;
 }
