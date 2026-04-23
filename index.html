@@ -16,6 +16,16 @@
       --sub: #98989d;
       --sep: #38383a;
       --fill: #2c2c2e;
+      --header-bg: rgba(28,28,30,0.9);
+    }
+    html.light {
+      --bg: #f2f2f7;
+      --card: #ffffff;
+      --text: #1c1c1e;
+      --sub: #6e6e73;
+      --sep: #c6c6c8;
+      --fill: #e5e5ea;
+      --header-bg: rgba(242,242,247,0.9);
     }
     * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     body {
@@ -30,7 +40,7 @@
 
     /* ── HEADER ── */
     .app-header {
-      background: rgba(28,28,30,0.9);
+      background: var(--header-bg);
       backdrop-filter: blur(20px);
       border-bottom: 0.5px solid var(--sep);
       position: sticky; top:0; z-index:100;
@@ -751,10 +761,14 @@
 <!-- ═══════════════════════════════════ HEADER -->
 <header class="app-header">
   <h1 id="hdr-title">サマリー</h1>
-  <div style="position:relative;">
-    <button class="auth-btn" id="auth-btn" title="Googleでログイン" onclick="signInGoogle()">
-      <span style="font-size:11px;color:var(--sub);">ログイン</span>
-    </button>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button id="theme-btn" onclick="toggleTheme()" title="ダーク/ライト切替"
+      style="background:none;border:none;font-size:20px;cursor:pointer;padding:2px 4px;line-height:1;">🌙</button>
+    <div style="position:relative;">
+      <button class="auth-btn" id="auth-btn" title="Googleでログイン" onclick="signInGoogle()">
+        <span style="font-size:11px;color:var(--sub);">ログイン</span>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -1716,6 +1730,28 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <script>
+// ═══════════════════════════════════════════════════
+//  THEME (DARK / LIGHT)
+// ═══════════════════════════════════════════════════
+(function() {
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.add('light');
+  }
+})();
+
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+}
+
+// ページロード時にボタンアイコン同期
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = document.documentElement.classList.contains('light') ? '☀️' : '🌙';
+});
+
 // ═══════════════════════════════════════════════════
 //  FIREBASE
 // ═══════════════════════════════════════════════════
@@ -2887,7 +2923,8 @@ function buildKpiTile(title, pct, stats) {
 // 月次/年次共通のKPIタイル群を生成
 function buildKpiTiles(incTotal, expTotal, investTotal, savTotal) {
   const investSavTotal = investTotal + savTotal;
-  const profit = incTotal - expTotal - investSavTotal;
+  // 利益 = 収入 - 支出（投資・貯蓄は除く）
+  const profit = incTotal - expTotal;
   const r = (v) => incTotal > 0 ? Math.round(v / incTotal * 100) : null;
   let html = '';
   if (incTotal > 0) {
@@ -2909,7 +2946,7 @@ function buildKpiTiles(incTotal, expTotal, investTotal, savTotal) {
     ]);
     html += buildKpiTile('利益率', r(profit), [
       { label:'収入合計', value: yen(incTotal), color:'var(--success)' },
-      { label:'支出合計（全体）', value: yen(expTotal + investSavTotal), color:'var(--danger)' },
+      { label:'支出合計', value: yen(expTotal), color:'var(--danger)' },
       { label:'利益', value: yenSigned(profit), color: profit >= 0 ? 'var(--success)' : 'var(--danger)' }
     ]);
   }
