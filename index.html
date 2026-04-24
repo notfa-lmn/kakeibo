@@ -754,6 +754,124 @@
       text-align: center; min-height: 18px;
       padding: 0 2px;
     }
+
+    /* ════════════════════════════════════════════════
+       DESKTOP LAYOUT (>= 900px)
+    ════════════════════════════════════════════════ */
+    .desktop-sidebar { display: none; }
+    #desktop-body { display: contents; }
+
+    @media (min-width: 900px) {
+      body {
+        max-width: 100%;
+        padding-bottom: 0;
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .app-header { max-width: 100%; width: 100%; }
+
+      #desktop-body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      /* ── Sidebar ── */
+      .desktop-sidebar {
+        display: flex;
+        flex-direction: column;
+        width: 220px;
+        min-width: 220px;
+        background: var(--card);
+        border-right: 1px solid var(--sep);
+        overflow-y: auto;
+        flex-shrink: 0;
+      }
+      .sb-logo {
+        font-size: 18px; font-weight: 800;
+        padding: 20px 20px 16px;
+        color: var(--text);
+        border-bottom: 0.5px solid var(--sep);
+      }
+      .sb-month-nav {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 8px 12px;
+        border-bottom: 0.5px solid var(--sep);
+      }
+      .sb-month-btn {
+        background: none; border: none; cursor: pointer;
+        font-size: 22px; color: var(--primary); padding: 2px 8px;
+        border-radius: 6px;
+      }
+      .sb-month-btn:hover { background: var(--fill); }
+      .sb-month-label { font-size: 14px; font-weight: 700; text-align: center; flex: 1; }
+      .sb-nav {
+        display: flex; flex-direction: column;
+        gap: 2px; padding: 12px 8px 8px;
+      }
+      .sb-nav-btn {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: 10px;
+        border: none; background: none; cursor: pointer;
+        font-size: 14px; font-weight: 500; font-family: inherit;
+        color: var(--text); text-align: left; width: 100%;
+        transition: background 0.15s;
+      }
+      .sb-nav-btn:hover { background: var(--fill); }
+      .sb-nav-btn.active { background: rgba(10,132,255,0.15); color: var(--primary); font-weight: 600; }
+      .sb-nav-icon { font-size: 18px; width: 26px; text-align: center; }
+      .sb-divider { height: 0.5px; background: var(--sep); margin: 8px 16px; }
+      .sb-section-title {
+        font-size: 11px; color: var(--sub); font-weight: 600;
+        padding: 4px 20px 4px;
+        letter-spacing: 0.5px; text-transform: uppercase;
+      }
+      .sb-add-btn {
+        display: flex; align-items: center; gap: 8px;
+        padding: 9px 20px; border: none; background: none;
+        cursor: pointer; font-size: 13px; font-family: inherit;
+        color: var(--sub); text-align: left; width: 100%;
+        transition: background 0.15s;
+      }
+      .sb-add-btn:hover { background: var(--fill); color: var(--text); }
+
+      /* ── Main content ── */
+      #app-main {
+        flex: 1; overflow-y: auto; min-width: 0;
+        background: var(--bg);
+      }
+      .screen.active { padding-bottom: 32px; }
+
+      /* Hide mobile-only elements */
+      .bottom-nav { display: none !important; }
+      #scr-summary .month-nav,
+      #scr-list .month-nav { display: none; }
+
+      /* Content width constraints */
+      #anl-body { padding: 0 32px 24px; }
+      .form-wrap { max-width: 640px; margin: 0 auto; }
+      #expense-list { max-width: 900px; margin: 0 auto; }
+      #settings-body { max-width: 700px; margin: 0 auto; }
+      #summary-body { max-width: 800px; margin: 0 auto; }
+
+      /* Analytics tiles: 2-up row on desktop */
+      .kpi-tile-stats { gap: 20px; }
+
+      /* Pie charts: side by side */
+      .pie-row-desktop { display: flex; gap: 16px; flex-wrap: wrap; }
+      .pie-row-desktop .pie-wrap { flex: 1; min-width: 260px; }
+
+      /* Analytics 2-col layout */
+      .anl-desktop-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -771,6 +889,41 @@
     </div>
   </div>
 </header>
+
+<!-- ═══════════════════════════════════ DESKTOP LAYOUT WRAPPER -->
+<div id="desktop-body">
+
+<!-- ── Desktop Sidebar (hidden on mobile) ── -->
+<aside class="desktop-sidebar" id="desktop-sidebar">
+  <div class="sb-logo">📒 家計簿</div>
+  <div class="sb-month-nav">
+    <button class="sb-month-btn" onclick="navMonth(-1)">‹</button>
+    <span class="sb-month-label" id="sb-month"></span>
+    <button class="sb-month-btn" onclick="navMonth(1)">›</button>
+  </div>
+  <nav class="sb-nav">
+    <button class="sb-nav-btn active" id="sb-nav-summary" onclick="switchScreen('summary')">
+      <span class="sb-nav-icon">🏠</span><span>サマリー</span>
+    </button>
+    <button class="sb-nav-btn" id="sb-nav-list" onclick="switchScreen('list')">
+      <span class="sb-nav-icon">📋</span><span>収支一覧</span>
+    </button>
+    <button class="sb-nav-btn" id="sb-nav-analytics" onclick="switchScreen('analytics')">
+      <span class="sb-nav-icon">📊</span><span>分析</span>
+    </button>
+    <button class="sb-nav-btn" id="sb-nav-settings" onclick="switchScreen('settings')">
+      <span class="sb-nav-icon">⚙️</span><span>設定</span>
+    </button>
+  </nav>
+  <div class="sb-divider"></div>
+  <div class="sb-section-title">追加する</div>
+  <button class="sb-add-btn" onclick="switchScreen('add')">💸 支出を手入力</button>
+  <button class="sb-add-btn" onclick="openIncomeModal()">💰 収入を追加</button>
+  <button class="sb-add-btn" onclick="openCompanySalesModal()">🏢 会社売上</button>
+</aside>
+
+<!-- ── Main content area ── -->
+<div id="app-main">
 
 <!-- ═══════════════════════════════════ SUMMARY -->
 <div id="scr-summary" class="screen active">
@@ -1091,6 +1244,9 @@
     <div class="spacer"></div>
   </div>
 </div>
+
+</div><!-- #app-main -->
+</div><!-- #desktop-body -->
 
 <!-- ═══════════════════════════════════ BOTTOM NAV -->
 <nav class="bottom-nav">
@@ -1746,10 +1902,11 @@ function toggleTheme() {
   if (btn) btn.textContent = isLight ? '☀️' : '🌙';
 }
 
-// ページロード時にボタンアイコン同期
+// ページロード時にボタンアイコン・サイドバー同期
 document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = document.documentElement.classList.contains('light') ? '☀️' : '🌙';
+  syncSidebarMonth();
 });
 
 // ═══════════════════════════════════════════════════
@@ -2747,7 +2904,13 @@ function navMonth(dir) {
   generateRecurring(curMonth);
   generateRecurringTeki3(curMonth);
   generateRecurringAnl(curMonth);
+  syncSidebarMonth();
   renderScreen();
+}
+
+function syncSidebarMonth() {
+  const el = document.getElementById('sb-month');
+  if (el) el.textContent = monthLabel(curMonth);
 }
 
 function switchScreen(name) {
@@ -2757,7 +2920,10 @@ function switchScreen(name) {
   ['summary','list','analytics','settings'].forEach(n => {
     const el = document.getElementById('nav-' + n);
     if (el) el.classList.toggle('active', n === name);
+    const sb = document.getElementById('sb-nav-' + n);
+    if (sb) sb.classList.toggle('active', n === name);
   });
+  syncSidebarMonth();
   const titles = { summary:'サマリー', add:'支出を入力', list:'収支一覧', analytics:'月次分析', settings:'設定' };
   document.getElementById('hdr-title').textContent = titles[name] || '';
   if (name === 'add') {
