@@ -1932,11 +1932,55 @@ try {
     currentUser = user;
     updateAuthUI();
     if (user) {
-      await loadFromCloud();
+      await loadFromCloud();   // 初回：一度だけ取得（ローカルより新しければ適用）
+      startRealtimeSync();     // 以降：リアルタイムで他デバイスの変更を受信
+    } else {
+      stopRealtimeSync();
     }
   });
 } catch(e) {
   console.warn('Firebase init failed:', e);
+}
+
+// ── リアルタイム同期 ──────────────────────────────
+let _unsubSnapshot = null;
+
+function startRealtimeSync() {
+  if (!currentUser || !fbDb) return;
+  stopRealtimeSync();
+  _unsubSnapshot = fbDb.collection('users').doc(currentUser.uid)
+    .onSnapshot(doc => {
+      if (!doc.exists) return;
+      const cloud = doc.data();
+      if (!cloud || !cloud.settings || !cloud.months) return;
+      const cloudTs = cloud._savedAt || 0;
+      const localTs = D._savedAt || 0;
+      // 自分のsaveによる通知は無視（タイムスタンプが同じ or 古い）
+      if (cloudTs <= localTs) return;
+      // 別デバイスからの更新を適用
+      D = cloud;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+      generateRecurring(curMonth);
+      generateRecurringTeki3(curMonth);
+      generateRecurringIncome(curMonth);
+      generateRecurringAnl(curMonth);
+      renderScreen();
+      showSyncToast('☁️ 他のデバイスのデータを同期しました');
+    }, err => {
+      console.warn('Realtime sync error:', err);
+    });
+}
+
+function stopRealtimeSync() {
+  if (_unsubSnapshot) { _unsubSnapshot(); _unsubSnapshot = null; }
+}
+
+function showSyncToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);background:rgba(48,209,88,0.92);color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
 }
 
 async function saveToCloud() {
@@ -1955,12 +1999,10 @@ async function loadFromCloud() {
     if (doc.exists) {
       const cloud = doc.data();
       if (cloud && cloud.settings && cloud.months) {
-        // ローカルの方が新しい場合（削除直後のリロード等）はクラウドで上書きしない
         const localTs = D._savedAt || 0;
         const cloudTs = cloud._savedAt || 0;
         if (cloudTs < localTs) {
           // ローカルが新しい→クラウドに書き直して終了
-          console.log('Local is newer, pushing to cloud...');
           await saveToCloud();
           renderScreen();
           return;
@@ -1974,7 +2016,6 @@ async function loadFromCloud() {
         renderScreen();
       }
     } else {
-      // 初回クラウド利用時：ローカルデータをアップロード
       await saveToCloud();
     }
   } catch(e) {
