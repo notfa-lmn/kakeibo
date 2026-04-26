@@ -5507,7 +5507,7 @@ function submitExpense() {
     date, name, amount,
     payType: document.getElementById('f-pay').value,
     sat: selSatVal,
-    budgetAlloc: parseFloat(document.getElementById('transfer-disp').value) || calcBudgetAlloc(amount, document.getElementById('f-pay').value),
+    budgetAlloc: (() => { const v = document.getElementById('transfer-disp').value; return v !== '' ? parseFloat(v)||0 : calcBudgetAlloc(amount, document.getElementById('f-pay').value); })(),
     transferAmt: parseFloat(document.getElementById('f-transfer-amt').value)||0,
     noCc: document.getElementById('f-no-cc').checked,
     nmType, nmAmt,
