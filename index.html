@@ -559,6 +559,41 @@
     .pie-wrap { background:var(--card); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:12px; }
     .pie-legend { flex:1; min-width:0; }
 
+    /* ── UNFUNDED SECTION ── */
+    .unfunded-wrap {
+      margin: 10px 16px 0;
+      background: rgba(255,69,58,0.07);
+      border: 1px solid rgba(255,69,58,0.25);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .unfunded-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; cursor: pointer;
+    }
+    .unfunded-header:hover { background: rgba(255,69,58,0.05); }
+    .unfunded-badge {
+      background: var(--danger); color: #fff;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 10px;
+    }
+    .unfunded-arrow {
+      color: var(--sub); font-size: 11px;
+      transition: transform 0.2s;
+    }
+    .unfunded-arrow.open { transform: rotate(90deg); }
+    .unfunded-body { border-top: 1px solid rgba(255,69,58,0.15); }
+    .unfunded-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; cursor: pointer;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .unfunded-row:last-child { border-bottom: none; }
+    .unfunded-row:hover { background: rgba(255,69,58,0.04); }
+    .unfunded-date { font-size: 12px; color: var(--sub); min-width: 48px; }
+    .unfunded-name { flex: 1; font-size: 14px; color: var(--text); }
+    .unfunded-amount { font-size: 14px; font-weight: 700; color: var(--danger); white-space: nowrap; }
+
     /* ── REC APPLY BUTTON ── */
     .rec-apply-btn {
       font-size: 12px; font-weight: 600; font-family: inherit;
@@ -4382,19 +4417,54 @@ function refreshBankDisplay() {
 function renderList() {
   document.getElementById('list-month').textContent = monthLabel(curMonth);
   const md = mdata(curMonth);
+
+  // ── 未充当クレジット支出セクション ──
+  const unfunded = (md.expenses||[]).filter(e =>
+    !e.noCc && !e.payType && !(e.transferAmt > 0)
+  ).sort((a,b) => b.date.localeCompare(a.date));
+  const unfundedTotal = unfunded.reduce((s,e) => s + (e.amount||0), 0);
+  const el = document.getElementById('expense-list');
+  let html = '';
+  if (unfunded.length) {
+    const isOpen = localStorage.getItem('unfundedOpen') !== '0';
+    html += `
+    <div class="unfunded-wrap">
+      <div class="unfunded-header" onclick="toggleUnfundedSection()">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-weight:700;font-size:14px;">💳 未充当クレジット</span>
+          <span class="unfunded-badge">${unfunded.length}件</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:14px;font-weight:700;color:var(--danger);">${yen(unfundedTotal)}</span>
+          <span class="unfunded-arrow ${isOpen?'open':''}" id="unfunded-arrow">▶</span>
+        </div>
+      </div>
+      <div class="unfunded-body" id="unfunded-body" style="${isOpen?'':'display:none;'}">`;
+    unfunded.forEach(e => {
+      const [,,day] = e.date.split('-');
+      const wd = ['日','月','火','水','木','金','土'][new Date(e.date).getDay()];
+      const autoBadge = e.auto ? `<span class="auto-badge">自動</span>` : '';
+      html += `
+        <div class="unfunded-row" onclick="openEdit('${e.id}')">
+          <div class="unfunded-date">${parseInt(day)}日(${wd})</div>
+          <div class="unfunded-name">${autoBadge}${esc(e.name)}</div>
+          <div class="unfunded-amount">${yen(e.amount)}</div>
+        </div>`;
+    });
+    html += `</div></div>`;
+  }
+
   // 支出 + 会社売上のみ（給与・事業所得等の非CC収入は収支一覧に表示しない）
   const items = [
     ...(md.expenses||[]).map(e => ({...e, _type:'expense'})),
     ...(md.incomes||[]).filter(x => x.category === '会社売上').map(x => ({...x, _type:'company'})),
   ].sort((a,b) => b.date.localeCompare(a.date));
-  const el = document.getElementById('expense-list');
-  if (!items.length) {
+  if (!items.length && !unfunded.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
     return;
   }
   const byDate = {};
   items.forEach(x => { (byDate[x.date] = byDate[x.date]||[]).push(x); });
-  let html = '';
   Object.keys(byDate).sort((a,b) => b.localeCompare(a)).forEach(date => {
     const [,, day] = date.split('-');
     const wd = ['日','月','火','水','木','金','土'][new Date(date).getDay()];
@@ -4458,6 +4528,16 @@ function renderList() {
     });
   });
   el.innerHTML = html;
+}
+
+function toggleUnfundedSection() {
+  const body = document.getElementById('unfunded-body');
+  const arrow = document.getElementById('unfunded-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  arrow.classList.toggle('open', !isOpen);
+  localStorage.setItem('unfundedOpen', isOpen ? '0' : '1');
 }
 
 // ═══════════════════════════════════════════════════
