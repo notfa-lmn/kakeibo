@@ -940,7 +940,7 @@
     <button class="sb-nav-btn active" id="sb-nav-summary" onclick="switchScreen('summary')">
       <span class="sb-nav-icon">🏠</span><span>サマリー</span>
     </button>
-    <button class="sb-nav-btn" id="sb-nav-list" onclick="switchScreen('list')">
+    <button class="sb-nav-btn" id="sb-nav-list" onclick="openFilteredList('all')">
       <span class="sb-nav-icon">📋</span><span>収支一覧</span>
     </button>
     <button class="sb-nav-btn" id="sb-nav-analytics" onclick="switchScreen('analytics')">
@@ -984,15 +984,15 @@
 
   <!-- Totals row -->
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 16px 0;">
-    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
+    <div class="card tap-card" style="margin:0;" onclick="openFilteredList('all')">
       <div class="card-label">今月の支出計</div>
       <div class="card-value" id="total-val" style="font-size:18px;">¥0</div>
     </div>
-    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
+    <div class="card tap-card" style="margin:0;" onclick="openFilteredList('credit')">
       <div class="card-label">💳 クレジット計</div>
       <div class="card-value" id="credit-total-val" style="font-size:18px;">¥0</div>
     </div>
-    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
+    <div class="card tap-card" style="margin:0;" onclick="openFilteredList('nocc')">
       <div class="card-label">🏦 銀行引落計</div>
       <div class="card-value" id="nocc-total-val" style="font-size:18px;">¥0</div>
     </div>
@@ -1157,6 +1157,11 @@
     <span class="month-nav-label" id="list-month"></span>
     <button class="month-nav-btn" onclick="navMonth(1)">›</button>
   </div>
+  <!-- フィルターバー（フィルター中のみ表示） -->
+  <div id="list-filter-bar" style="display:none;align-items:center;gap:8px;padding:8px 16px 0;">
+    <span id="list-filter-label" style="font-size:13px;font-weight:600;color:var(--primary);background:rgba(0,122,255,0.1);padding:4px 10px;border-radius:20px;"></span>
+    <button onclick="clearListFilter()" style="font-size:12px;color:var(--sub);background:none;border:none;cursor:pointer;padding:4px 8px;">✕ 解除</button>
+  </div>
   <div style="padding: 10px 16px 0;">
     <button class="btn btn-s" style="padding:10px;font-size:14px;" onclick="openCsvModal()">
       📄 楽天カードCSVを照合
@@ -1293,7 +1298,7 @@
     <span class="nav-icon">🏠</span>
     <span class="nav-label">サマリー</span>
   </button>
-  <button class="nav-btn" id="nav-list" onclick="switchScreen('list')">
+  <button class="nav-btn" id="nav-list" onclick="openFilteredList('all')">
     <span class="nav-icon">📋</span>
     <span class="nav-label">収支一覧</span>
   </button>
@@ -2185,6 +2190,7 @@ const INCOME_CATS = {
 let curMonth = todayMonthKey();
 let curScreen = 'summary';
 let editId = null;
+let listFilter = 'all'; // 'all' | 'credit' | 'nocc'
 let selSatVal = '△';
 let selRecSatVal = '○';
 let editRecId = null;
@@ -4454,14 +4460,37 @@ function refreshBankDisplay() {
 // ═══════════════════════════════════════════════════
 //  RENDER — LIST
 // ═══════════════════════════════════════════════════
+function openFilteredList(filter) {
+  listFilter = filter;
+  switchScreen('list');
+}
+function clearListFilter() {
+  listFilter = 'all';
+  renderList();
+}
+
 function renderList() {
   document.getElementById('list-month').textContent = monthLabel(curMonth);
+
+  // フィルターバー表示制御
+  const filterBar = document.getElementById('list-filter-bar');
+  const filterLabel = document.getElementById('list-filter-label');
+  if (listFilter === 'credit') {
+    filterBar.style.display = 'flex';
+    filterLabel.textContent = '💳 クレジットのみ表示';
+  } else if (listFilter === 'nocc') {
+    filterBar.style.display = 'flex';
+    filterLabel.textContent = '🏦 銀行引落のみ表示';
+  } else {
+    filterBar.style.display = 'none';
+  }
+
   const md = mdata(curMonth);
 
-  // ── 未充当クレジット支出セクション ──
-  const unfunded = (md.expenses||[]).filter(e =>
+  // ── 未充当クレジット支出セクション（クレジット表示時のみ） ──
+  const unfunded = listFilter !== 'nocc' ? (md.expenses||[]).filter(e =>
     !e.noCc && !e.payType && !(e.transferAmt > 0) && !(e.nmAmt > 0)
-  ).sort((a,b) => b.date.localeCompare(a.date));
+  ).sort((a,b) => b.date.localeCompare(a.date)) : [];
   const unfundedTotal = unfunded.reduce((s,e) => s + (e.amount||0), 0);
   const el = document.getElementById('expense-list');
   let html = '';
@@ -4494,10 +4523,18 @@ function renderList() {
     html += `</div></div>`;
   }
 
-  // 支出 + 会社売上のみ（給与・事業所得等の非CC収入は収支一覧に表示しない）
+  // 支出 + 会社売上のみ（フィルターに応じて絞り込み）
+  const expenseItems = (md.expenses||[]).filter(e => {
+    if (listFilter === 'credit') return !e.noCc;
+    if (listFilter === 'nocc')   return  e.noCc;
+    return true;
+  });
+  const companySales = listFilter === 'all'
+    ? (md.incomes||[]).filter(x => x.category === '会社売上').map(x => ({...x, _type:'company'}))
+    : [];
   const items = [
-    ...(md.expenses||[]).map(e => ({...e, _type:'expense'})),
-    ...(md.incomes||[]).filter(x => x.category === '会社売上').map(x => ({...x, _type:'company'})),
+    ...expenseItems.map(e => ({...e, _type:'expense'})),
+    ...companySales,
   ].sort((a,b) => b.date.localeCompare(a.date));
   if (!items.length && !unfunded.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
