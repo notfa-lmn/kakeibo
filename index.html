@@ -2247,13 +2247,12 @@ async function saveAndWait() {
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false, adjNmApplied:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
   if (!D.months[key].adj) D.months[key].adj = {};
   if (!D.months[key].incomes) D.months[key].incomes = [];
   if (!D.months[key].anlEntries) D.months[key].anlEntries = [];
   if (D.months[key].recAnlDone === undefined) D.months[key].recAnlDone = false;
   if (D.months[key].recTeki3Done === undefined) D.months[key].recTeki3Done = false;
-  if (D.months[key].adjNmApplied === undefined) D.months[key].adjNmApplied = false;
   if (!D.months[key].mfRecords) D.months[key].mfRecords = [];
   if (D.months[key].mfImportedAt === undefined) D.months[key].mfImportedAt = '';
   return D.months[key];
@@ -2327,26 +2326,26 @@ function displayBudgetBalance(mk, cat) {
 // ── 前月の次月振込予定 → 当月のadjにマイナス自動反映 ──
 const NM_ADJ_CATS = new Set(['食料品', 'お小遣い', '日用品']);
 
+// 前月の「次月振込予定」をもとに当月のadj（予算調整）をリアルタイム再計算する
+// ※常に再計算（フラグなし）。支出save前に呼ぶことでcloud保存にも含まれる
 function applyNmAdj(mk) {
-  const md = mdata(mk);
-  if (md.adjNmApplied) return; // 既に適用済み
   const prevKey = prevMk(mk);
-  if (!D.months[prevKey]) { md.adjNmApplied = true; return; }
-  const prevExps = D.months[prevKey].expenses || [];
+  const md = mdata(mk);
+  if (!md.adj) md.adj = {};
   // 前月の次月振込予定を種別ごとに合計
   const nmSums = {};
-  prevExps.forEach(e => {
-    if (e.nmType && NM_ADJ_CATS.has(e.nmType) && e.nmAmt > 0) {
-      nmSums[e.nmType] = (nmSums[e.nmType] || 0) + e.nmAmt;
-    }
+  if (D.months[prevKey]) {
+    const prevExps = D.months[prevKey].expenses || [];
+    prevExps.forEach(e => {
+      if (e.nmType && NM_ADJ_CATS.has(e.nmType) && e.nmAmt > 0) {
+        nmSums[e.nmType] = (nmSums[e.nmType] || 0) + e.nmAmt;
+      }
+    });
+  }
+  // NM_ADJ_CATSの各カテゴリをマイナス値で上書き（nmAmtなければ0にリセット）
+  NM_ADJ_CATS.forEach(cat => {
+    md.adj[cat] = nmSums[cat] ? -(nmSums[cat]) : 0;
   });
-  // 今月のadjにマイナス値で自動セット
-  if (!md.adj) md.adj = {};
-  Object.entries(nmSums).forEach(([cat, total]) => {
-    md.adj[cat] = -total;
-  });
-  md.adjNmApplied = true;
-  saveLocalOnly();
 }
 
 function bankBalance(mk) {
@@ -3007,7 +3006,8 @@ function navMonth(dir) {
   generateRecurring(curMonth);
   generateRecurringTeki3(curMonth);
   generateRecurringAnl(curMonth);
-  applyNmAdj(curMonth);
+  applyNmAdj(curMonth);   // 前月nmAmtから当月adjを再計算
+  saveLocalOnly();         // adjをローカルに反映（次回ロード時のために）
   syncSidebarMonth();
   renderScreen();
 }
@@ -5668,6 +5668,8 @@ function submitExpense() {
   } else {
     md.expenses.push({ id: uid(), ...expObj });
   }
+  // 次月振込予定が変わりうるため、次月のadjを再計算してからsave（cloud保存にも含める）
+  applyNmAdj(nextMk(mk));
   save();
   editId = null;
   curMonth = mk;
@@ -5681,6 +5683,8 @@ function deleteExpense() {
   if (!confirm('この支出を削除しますか？')) return;
   const md = mdata(curMonth);
   md.expenses = md.expenses.filter(e => e.id !== editId);
+  // 次月振込予定が変わりうるため、次月のadjを再計算してからsave
+  applyNmAdj(nextMk(curMonth));
   save();
   editId = null;
   switchScreen('list');
@@ -6294,6 +6298,35 @@ generateRecurringIncome(curMonth);
 generateRecurringAnl(curMonth);
 applyNmAdj(curMonth);
 renderSummary();
+
+// ─── 月変更監視（1分ごとにチェック）───────────────────────
+// アプリを開いたまま日付をまたいだ場合に自動で新月のadj反映と画面切替を行う
+(function startMonthWatcher() {
+  let _watchedMk = todayMonthKey();
+  setInterval(function() {
+    const nowMk = todayMonthKey();
+    if (nowMk === _watchedMk) return; // 月は変わっていない
+    _watchedMk = nowMk;
+
+    // 新しい月のadjを前月nmAmtから再計算してローカル保存
+    // ※次にこの月で何か保存したときにcloudにも反映される
+    applyNmAdj(nowMk);
+    saveLocalOnly();
+
+    // ユーザーが直前の月（＝ちょうど変わった月）を閲覧中なら新しい月へ自動切替
+    if (curMonth === prevMk(nowMk)) {
+      curMonth = nowMk;
+      generateRecurring(curMonth);
+      generateRecurringTeki3(curMonth);
+      generateRecurringIncome(curMonth);
+      generateRecurringAnl(curMonth);
+      syncSidebarMonth();
+      renderScreen();
+    }
+
+    showSyncToast('📅 ' + monthLabel(nowMk) + ' になりました');
+  }, 60000); // 60秒ごとにチェック（最大1分の遅延）
+})();
 </script>
 </body>
 </html>
