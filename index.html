@@ -4420,7 +4420,7 @@ function renderList() {
 
   // ── 未充当クレジット支出セクション ──
   const unfunded = (md.expenses||[]).filter(e =>
-    !e.noCc && !e.payType && !(e.transferAmt > 0)
+    !e.noCc && !e.payType && !(e.transferAmt > 0) && !(e.nmAmt > 0)
   ).sort((a,b) => b.date.localeCompare(a.date));
   const unfundedTotal = unfunded.reduce((s,e) => s + (e.amount||0), 0);
   const el = document.getElementById('expense-list');
