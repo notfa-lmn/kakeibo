@@ -2097,6 +2097,8 @@ function updateAuthUI() {
 //  CONSTANTS
 // ═══════════════════════════════════════════════════
 const CATS = ['特別費','敵３','投資待機資金','食料品','日用品','お小遣い','配当金'];
+// サマリー画面のタイル表示順（2列グリッドで左→右の順）
+const SUMMARY_TILE_CATS = ['特別費','配当金','敵３','投資待機資金','食料品','日用品','お小遣い'];
 const CARRYOVER_CATS = new Set(['特別費','配当金','敵３','投資待機資金']);
 const STORAGE_KEY = 'kakeibo_v2';
 
@@ -4297,7 +4299,7 @@ function renderSummary() {
   const grid = document.getElementById('budget-grid');
   grid.innerHTML = '';
   const md = mdata(curMonth);
-  CATS.forEach(cat => {
+  SUMMARY_TILE_CATS.forEach(cat => {
     const base = D.settings.budgets[cat]||0;
     const adj  = (md.adj||{})[cat]||0;
     const bal = displayBudgetBalance(curMonth, cat);
