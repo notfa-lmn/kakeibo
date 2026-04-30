@@ -6082,6 +6082,8 @@ function handleCsv(ev) {
   reader.readAsArrayBuffer(file);
 }
 
+let _lastCsvResult = []; // 照合結果キャッシュ（ダウンロード用）
+
 function processCsv(raw) {
   const lines = raw.split(/\r?\n/).filter(l => l.trim());
   let headerIdx = -1;
@@ -6094,7 +6096,6 @@ function processCsv(raw) {
     document.getElementById('csv-result').innerHTML = '<div style="color:var(--danger);font-size:14px;text-align:center;padding:16px;">CSVのヘッダーが見つかりませんでした。楽天カードの明細CSVを使用してください。</div>';
     return;
   }
-  // Determine column indices from header
   const headers = parseCsvLine(lines[headerIdx]);
   const colDate = headers.findIndex(h => h.includes('利用日'));
   const colName = headers.findIndex(h => h.includes('利用店名') || h.includes('商品名'));
@@ -6126,15 +6127,19 @@ function processCsv(raw) {
   const exps = md.expenses||[];
   let matchN = 0, missN = 0;
   let itemsHtml = '';
+  _lastCsvResult = [];
 
   csvItems.forEach(ci => {
     const found = exps.find(e => e.amount === ci.amount && e.date === ci.date);
+    const status = found ? '一致' : '未入力';
+    const entryName = found ? (found.name || '') : '';
+    _lastCsvResult.push({ ...ci, status, entryName });
     if (found) {
       matchN++;
       itemsHtml += `
         <div class="csv-item ok">
           <div class="csv-item-name"><span class="csv-tag tag-ok">一致</span>${esc(ci.name)}</div>
-          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}</div>
+          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}${entryName ? `　→ ${esc(entryName)}` : ''}</div>
         </div>`;
     } else {
       missN++;
@@ -6157,9 +6162,31 @@ function processCsv(raw) {
         <div style="font-size:11px;color:var(--sub);">未入力</div>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${csvItems.length}件 / 手入力: ${exps.length}件</div>`;
+    <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${csvItems.length}件 / 手入力: ${exps.length}件</div>
+    <button onclick="downloadCsvResult()" style="width:100%;padding:10px;margin-bottom:12px;background:var(--fill);border:none;border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
+      ⬇️ 照合結果をCSVでダウンロード
+    </button>`;
 
   document.getElementById('csv-result').innerHTML = summaryHtml + itemsHtml;
+}
+
+function downloadCsvResult() {
+  if (!_lastCsvResult.length) return;
+  const rows = [
+    ['利用日', '利用店名', '利用金額', '照合結果', '手入力費目名'],
+    ..._lastCsvResult.map(r => [r.date, r.name, r.amount, r.status, r.entryName])
+  ];
+  const csvText = rows.map(row =>
+    row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+  ).join('\r\n');
+  const bom = '﻿';
+  const blob = new Blob([bom + csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `楽天カード照合_${curMonth}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function parseCsvLine(line) {
