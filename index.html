@@ -983,14 +983,18 @@
   </div>
 
   <!-- Totals row -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 16px 0;">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 16px 0;">
     <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
       <div class="card-label">今月の支出計</div>
-      <div class="card-value" id="total-val" style="font-size:20px;">¥0</div>
+      <div class="card-value" id="total-val" style="font-size:18px;">¥0</div>
     </div>
     <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
-      <div class="card-label">クレジット支払計</div>
-      <div class="card-value" id="credit-total-val" style="font-size:20px;">¥0</div>
+      <div class="card-label">💳 クレジット計</div>
+      <div class="card-value" id="credit-total-val" style="font-size:18px;">¥0</div>
+    </div>
+    <div class="card tap-card" style="margin:0;" onclick="switchScreen('list')">
+      <div class="card-label">🏦 銀行引落計</div>
+      <div class="card-value" id="nocc-total-val" style="font-size:18px;">¥0</div>
     </div>
   </div>
   <!-- Income row -->
@@ -2364,6 +2368,11 @@ function totalExpenses(mk) {
 function creditTotal(mk) {
   return (mdata(mk).expenses||[])
     .filter(e => !e.noCc)
+    .reduce((s,e) => s + (e.amount||0), 0);
+}
+function noCcTotal(mk) {
+  return (mdata(mk).expenses||[])
+    .filter(e => e.noCc)
     .reduce((s,e) => s + (e.amount||0), 0);
 }
 
@@ -4280,6 +4289,7 @@ function renderSummary() {
   refreshBankDisplay();
   document.getElementById('total-val').textContent = yen(totalExpenses(curMonth));
   document.getElementById('credit-total-val').textContent = yen(creditTotal(curMonth));
+  document.getElementById('nocc-total-val').textContent = yen(noCcTotal(curMonth));
   document.getElementById('income-budget-val').textContent = yen(totalIncome(curMonth,'予算内'));
   document.getElementById('income-extra-val').textContent = yen(totalIncome(curMonth,'予算外'));
   const companySalesTotal = (mdata(curMonth).incomes||[]).filter(x=>x.category==='会社売上').reduce((s,x)=>s+x.amount,0);
