@@ -1996,7 +1996,14 @@ function startRealtimeSync() {
     .onSnapshot(doc => {
       if (!doc.exists) return;
       const cloud = doc.data();
+      // クラウドデータが空/不正なら適用しない（空データ上書き防止）
       if (!cloud || !cloud.settings || !cloud.months) return;
+      const cloudHasData = Object.values(cloud.months).some(m =>
+        (m.expenses  && m.expenses.length  > 0) ||
+        (m.incomes   && m.incomes.length   > 0) ||
+        (m.mfRecords && m.mfRecords.length > 0)
+      );
+      if (!cloudHasData) return; // クラウドが空なら無視
       const cloudTs = cloud._savedAt || 0;
       const localTs = D._savedAt || 0;
       // 自分のsaveによる通知は無視（タイムスタンプが同じ or 古い）
@@ -2036,6 +2043,16 @@ async function saveToCloud() {
   }
 }
 
+// ローカルデータに実質的なデータがあるか判定（空データ上書き防止用）
+function hasLocalData() {
+  if (!D || !D.months) return false;
+  return Object.values(D.months).some(m =>
+    (m.expenses  && m.expenses.length  > 0) ||
+    (m.incomes   && m.incomes.length   > 0) ||
+    (m.mfRecords && m.mfRecords.length > 0)
+  );
+}
+
 async function loadFromCloud() {
   if (!currentUser || !fbDb) return;
   try {
@@ -2045,12 +2062,21 @@ async function loadFromCloud() {
       if (cloud && cloud.settings && cloud.months) {
         const localTs = D._savedAt || 0;
         const cloudTs = cloud._savedAt || 0;
-        if (cloudTs < localTs) {
-          // ローカルが新しい→クラウドに書き直して終了
+
+        // クラウドを優先すべきケース：
+        //   1. クラウドの方が新しい
+        //   2. クラウドとローカルが同タイムスタンプ（初回ロード等）
+        //   3. ローカルが新しくても実データが空（localStorage消去 or 初回起動）
+        const localIsNewer = cloudTs < localTs;
+        if (localIsNewer && hasLocalData()) {
+          // ローカルが新しく、かつ実データあり → クラウドを上書き
+          console.log('Local data is newer, pushing to cloud.');
           await saveToCloud();
           renderScreen();
           return;
         }
+
+        // クラウドを適用（クラウドが新しい、または同タイムスタンプ、またはローカルが空）
         D = cloud;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
         generateRecurring(curMonth);
@@ -2061,7 +2087,10 @@ async function loadFromCloud() {
         renderScreen();
       }
     } else {
-      await saveToCloud();
+      // クラウドにドキュメントなし → ローカルデータがあれば作成、なければ何もしない
+      if (hasLocalData()) {
+        await saveToCloud();
+      }
     }
   } catch(e) {
     console.warn('Cloud load failed:', e);
