@@ -1011,8 +1011,15 @@
   <!-- Company sales row -->
   <div style="margin:8px 16px 0;">
     <div class="card tap-card" onclick="openCompanySalesDetail()">
-      <div class="card-label">会社売上分（楽天銀行経由）</div>
-      <div class="card-value" id="company-sales-val" style="font-size:20px;color:var(--sub);">¥0</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div class="card-label">🏢 会社口座残高</div>
+        <div style="font-size:11px;color:var(--sub);">繰越累計</div>
+      </div>
+      <div class="card-value" id="company-balance-val" style="font-size:20px;color:var(--sub);">¥0</div>
+      <div style="display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--sub);">
+        <span>当月入金: <span id="company-income-val">¥0</span></span>
+        <span>当月出金: <span id="company-withdrawal-val">¥0</span></span>
+      </div>
     </div>
   </div>
 
@@ -1747,15 +1754,24 @@
       <button class="sheet-close" onclick="closeCompanySalesModal()">✕</button>
     </div>
     <div class="form-wrap" style="padding-top:0;">
+      <!-- 入金/出金 トグル -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button id="cs-btn-income" onclick="setCsType('income')"
+          style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--primary);background:var(--primary);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">
+          💰 入金（売上）
+        </button>
+        <button id="cs-btn-withdrawal" onclick="setCsType('withdrawal')"
+          style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--sep);background:var(--card);color:var(--sub);font-weight:700;font-size:14px;cursor:pointer;">
+          💸 出金
+        </button>
+      </div>
       <div class="fg">
         <label>日付</label>
         <input class="fi" type="date" id="cs-date">
       </div>
-      <div class="form-row">
-        <div class="fg">
-          <label>内訳</label>
-          <input class="fi" type="text" id="cs-subcategory" placeholder="例：ラクマ売上、商品名など">
-        </div>
+      <div class="fg">
+        <label id="cs-subcat-label">内訳</label>
+        <input class="fi" type="text" id="cs-subcategory" placeholder="例：ラクマ売上、商品名など">
       </div>
       <div class="fg">
         <label>金額（円）</label>
@@ -1765,10 +1781,10 @@
         <label>メモ（任意）</label>
         <input class="fi" type="text" id="cs-memo" placeholder="備考など">
       </div>
-      <div style="font-size:12px;color:var(--sub);background:var(--fill);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
-        ※ 楽天銀行残高（理論値）に加算されます。予算区分は「なし」で記録されます。
+      <div id="cs-hint" style="font-size:12px;color:var(--sub);background:var(--fill);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        ※ 楽天銀行残高（理論値）に加算されます。前月残高を引き継いで累計管理されます。
       </div>
-      <button class="btn btn-p" style="background:var(--sub);" onclick="submitCompanySales()">会社売上を記録</button>
+      <button class="btn btn-p" id="cs-submit-btn" style="background:var(--sub);" onclick="submitCompanySales()">会社売上を記録</button>
       <button class="btn btn-d" id="cs-del-btn" style="display:none;" onclick="deleteCompanySales()">削除する</button>
     </div>
   </div>
@@ -2389,13 +2405,38 @@ function applyNmAdj(mk) {
   });
 }
 
+// ─── 会社売上 ヘルパー ───────────────────────────────
+// 当月の会社売上入金合計（csType が 'withdrawal' 以外）
+function companyIncomeForMonth(mk) {
+  return (mdata(mk).incomes||[])
+    .filter(x => x.category === '会社売上' && x.csType !== 'withdrawal')
+    .reduce((s,x) => s + (x.amount||0), 0);
+}
+// 当月の会社売上出金合計
+function companyWithdrawalForMonth(mk) {
+  return (mdata(mk).incomes||[])
+    .filter(x => x.category === '会社売上' && x.csType === 'withdrawal')
+    .reduce((s,x) => s + (x.amount||0), 0);
+}
+// 当月純増（入金 − 出金）
+function companyNetForMonth(mk) {
+  return companyIncomeForMonth(mk) - companyWithdrawalForMonth(mk);
+}
+// 会社口座残高（前月からの繰越累計）
+function companyBalance(mk) {
+  const prev = prevMk(mk);
+  const prevBal = D.months[prev] ? companyBalance(prev) : 0;
+  return prevBal + companyNetForMonth(mk);
+}
+
 function bankBalance(mk) {
   const md = mdata(mk);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e) => s + (e.transferAmt||0), 0);
   const prevCredit = md.prevCredit || 0;
-  const companySales = (md.incomes||[]).filter(x => x.category === '会社売上').reduce((s,x) => s + x.amount, 0);
-  return budgetSum + transferSum + prevCredit + companySales;
+  // 会社売上は当月の純増（入金−出金）のみ反映
+  const companyNet = companyNetForMonth(mk);
+  return budgetSum + transferSum + prevCredit + companyNet;
 }
 
 function totalExpenses(mk) {
@@ -2784,21 +2825,49 @@ function onIncomeCatChange() {
 //  COMPANY SALES MODAL
 // ═══════════════════════════════════════════════════
 let editCompanySalesId = null;
+let _csType = 'income'; // 'income' | 'withdrawal'
+
+function setCsType(type) {
+  _csType = type;
+  const isIncome = type === 'income';
+  // トグルボタンのスタイル切替
+  document.getElementById('cs-btn-income').style.cssText =
+    `flex:1;padding:10px;border-radius:10px;border:2px solid ${isIncome?'var(--primary)':'var(--sep)'};background:${isIncome?'var(--primary)':'var(--card)'};color:${isIncome?'#fff':'var(--sub)'};font-weight:700;font-size:14px;cursor:pointer;`;
+  document.getElementById('cs-btn-withdrawal').style.cssText =
+    `flex:1;padding:10px;border-radius:10px;border:2px solid ${!isIncome?'var(--danger)':'var(--sep)'};background:${!isIncome?'var(--danger)':'var(--card)'};color:${!isIncome?'#fff':'var(--sub)'};font-weight:700;font-size:14px;cursor:pointer;`;
+  // ラベル・ヒント・ボタンを切替
+  document.getElementById('cs-subcat-label').textContent = isIncome ? '内訳' : '出金先・用途';
+  document.getElementById('cs-subcategory').placeholder = isIncome ? '例：ラクマ売上、商品名など' : '例：生活費への振替など';
+  document.getElementById('cs-hint').textContent = isIncome
+    ? '※ 楽天銀行残高（理論値）に加算されます。前月残高を引き継いで累計管理されます。'
+    : '※ 会社口座残高から減算されます。楽天銀行残高（理論値）からも差し引かれます。';
+  document.getElementById('cs-submit-btn').textContent = isIncome ? '入金を記録' : '出金を記録';
+  document.getElementById('cs-submit-btn').style.background = isIncome ? 'var(--sub)' : 'var(--danger)';
+  document.getElementById('company-sales-modal-title').textContent =
+    editCompanySalesId
+      ? (isIncome ? '会社売上を編集' : '出金を編集')
+      : (isIncome ? '会社売上を追加' : '出金を追加');
+}
 
 function openCompanySalesModal(id) {
   editCompanySalesId = id || null;
   document.getElementById('cs-del-btn').style.display = 'none';
   if (id) {
-    const inc = (mdata(curMonth).incomes||[]).find(x => x.id === id);
+    // 全月から対象レコードを検索
+    let inc = null;
+    for (const mk of Object.keys(D.months)) {
+      inc = (D.months[mk].incomes||[]).find(x => x.id === id);
+      if (inc) break;
+    }
     if (!inc) return;
-    document.getElementById('company-sales-modal-title').textContent = '会社売上を編集';
+    setCsType(inc.csType === 'withdrawal' ? 'withdrawal' : 'income');
     document.getElementById('cs-date').value = inc.date;
     document.getElementById('cs-subcategory').value = inc.subcategory||'';
     document.getElementById('cs-amount').value = inc.amount;
     document.getElementById('cs-memo').value = inc.memo||'';
     document.getElementById('cs-del-btn').style.display = '';
   } else {
-    document.getElementById('company-sales-modal-title').textContent = '会社売上を追加';
+    setCsType('income');
     document.getElementById('cs-date').value = todayStr();
     document.getElementById('cs-subcategory').value = '';
     document.getElementById('cs-amount').value = '';
@@ -2820,6 +2889,7 @@ function submitCompanySales() {
   const md = mdata(mk);
   const obj = {
     date, category: '会社売上', subcategory: subcat,
+    csType: _csType,
     amount, budgetType: 'なし',
     memo: document.getElementById('cs-memo').value.trim()
   };
@@ -2836,9 +2906,14 @@ function submitCompanySales() {
 }
 
 function deleteCompanySales() {
-  if (!editCompanySalesId || !confirm('この会社売上を削除しますか？')) return;
-  const md = mdata(curMonth);
-  md.incomes = md.incomes.filter(x => x.id !== editCompanySalesId);
+  if (!editCompanySalesId || !confirm('この記録を削除しますか？')) return;
+  // 全月から検索して削除
+  for (const mk of Object.keys(D.months)) {
+    const md = D.months[mk];
+    const before = (md.incomes||[]).length;
+    md.incomes = (md.incomes||[]).filter(x => x.id !== editCompanySalesId);
+    if (md.incomes.length < before) break;
+  }
   save();
   closeCompanySalesModal();
   renderScreen();
@@ -4329,8 +4404,9 @@ function renderSummary() {
   document.getElementById('nocc-total-val').textContent = yen(noCcTotal(curMonth));
   document.getElementById('income-budget-val').textContent = yen(totalIncome(curMonth,'予算内'));
   document.getElementById('income-extra-val').textContent = yen(totalIncome(curMonth,'予算外'));
-  const companySalesTotal = (mdata(curMonth).incomes||[]).filter(x=>x.category==='会社売上').reduce((s,x)=>s+x.amount,0);
-  document.getElementById('company-sales-val').textContent = yen(companySalesTotal);
+  document.getElementById('company-balance-val').textContent = yen(companyBalance(curMonth));
+  document.getElementById('company-income-val').textContent = yen(companyIncomeForMonth(curMonth));
+  document.getElementById('company-withdrawal-val').textContent = yen(companyWithdrawalForMonth(curMonth));
   const grid = document.getElementById('budget-grid');
   grid.innerHTML = '';
   const md = mdata(curMonth);
@@ -4369,23 +4445,46 @@ function closeDetailModal() {
 function openCompanySalesDetail() {
   const all = mdata(curMonth).incomes || [];
   const list = all.filter(x => x.category === '会社売上').sort((a,b) => a.date.localeCompare(b.date));
-  const title = '会社売上一覧';
+  const title = '🏢 会社口座 当月明細';
+  const prevBal = D.months[prevMk(curMonth)] ? companyBalance(prevMk(curMonth)) : 0;
+  const income = companyIncomeForMonth(curMonth);
+  const withdrawal = companyWithdrawalForMonth(curMonth);
+  const balance = companyBalance(curMonth);
+  let html = `
+    <div style="background:var(--fill);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin-bottom:6px;">
+        <span>前月繰越</span><span>${yen(prevBal)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--success);margin-bottom:4px;">
+        <span>当月入金</span><span>+${yen(income)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--danger);margin-bottom:8px;">
+        <span>当月出金</span><span>-${yen(withdrawal)}</span>
+      </div>
+      <div style="border-top:1px solid var(--sep);padding-top:8px;display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
+        <span>残高</span><span>${yen(balance)}</span>
+      </div>
+    </div>`;
   if (!list.length) {
-    openDetailModal(title, `<div style="text-align:center;padding:32px;color:var(--sub);">会社売上の記録がありません</div>`);
+    html += `<div style="text-align:center;padding:16px;color:var(--sub);">当月の記録がありません</div>`;
+    openDetailModal(title, html);
     return;
   }
-  const total = list.reduce((s,x) => s + x.amount, 0);
-  let html = `<div style="text-align:right;font-size:13px;color:var(--sub);margin-bottom:12px;">合計: <strong style="color:var(--sub);font-size:16px;">${yen(total)}</strong></div>`;
   html += '<div class="detail-block">';
   list.forEach(x => {
+    const isOut = x.csType === 'withdrawal';
     const sub = x.subcategory ? ` · ${esc(x.subcategory)}` : '';
     const memo = x.memo ? ` · ${esc(x.memo)}` : '';
+    const icon = isOut ? '💸' : '💰';
+    const label = isOut ? '出金' : '入金';
+    const color = isOut ? 'var(--danger)' : 'var(--success)';
+    const sign = isOut ? '-' : '+';
     html += `<div class="detail-inc-row" onclick="closeDetailModal();openCompanySalesModal('${x.id}')">
       <div>
-        <div style="font-size:14px;font-weight:500;">会社売上${sub}</div>
+        <div style="font-size:14px;font-weight:500;">${icon} ${label}${sub}</div>
         <div style="font-size:12px;color:var(--sub);">${x.date}${memo}</div>
       </div>
-      <div style="font-weight:700;color:var(--sub);">+${yen(x.amount)}</div>
+      <div style="font-weight:700;color:${color};">${sign}${yen(x.amount)}</div>
     </div>`;
   });
   html += '</div>';
@@ -4474,11 +4573,11 @@ function refreshBankDisplay() {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
-  const companySales = (md.incomes||[]).filter(x => x.category === '会社売上').reduce((s,x) => s + (x.amount||0), 0);
-  const total = budgetSum + transferSum + prevCredit + companySales;
+  const companyNet = companyNetForMonth(curMonth);
+  const total = budgetSum + transferSum + prevCredit + companyNet;
   document.getElementById('bank-val').textContent = yenSigned(total);
   const detailParts = [`予算残高: ${yenSigned(budgetSum)}`, `銀行振込: ${yen(transferSum)}`, `前月CC: ${yenSigned(prevCredit)}`];
-  if (companySales > 0) detailParts.push(`会社売上: ${yen(companySales)}`);
+  if (companyNet !== 0) detailParts.push(`会社売上(純): ${yenSigned(companyNet)}`);
   document.getElementById('bank-detail').textContent = detailParts.join('　');
   const pcEl = document.getElementById('prev-credit-input');
   if (document.activeElement !== pcEl) {
@@ -4577,15 +4676,20 @@ function renderList() {
     html += `<div class="date-header">${parseInt(day)}日（${wd}）</div>`;
     byDate[date].forEach(x => {
       if (x._type === 'company') {
+        const isOut = x.csType === 'withdrawal';
         const sub = x.subcategory ? ` / ${esc(x.subcategory)}` : '';
+        const icon = isOut ? '💸' : '🏢';
+        const label = isOut ? '会社出金' : '会社売上';
+        const color = isOut ? 'var(--danger)' : 'var(--sub)';
+        const sign = isOut ? '-' : '+';
         html += `
           <div class="income-row" onclick="openCompanySalesModal('${x.id}')">
-            <div class="inc-icon" style="color:var(--sub);">🏢</div>
+            <div class="inc-icon" style="color:${color};">${icon}</div>
             <div class="inc-info">
-              <div class="inc-name" style="color:var(--sub);">会社売上${sub}</div>
+              <div class="inc-name" style="color:${color};">${label}${sub}</div>
               <div class="inc-meta"><span class="tbadge" style="background:var(--fill);color:var(--sub);">会社</span>${x.memo ? ` ${esc(x.memo)}` : ''}</div>
             </div>
-            <div class="inc-amount" style="color:var(--sub);">+${yen(x.amount)}</div>
+            <div class="inc-amount" style="color:${color};">${sign}${yen(x.amount)}</div>
           </div>`;
       } else if (x._type === 'income') {
         const sub = x.subcategory ? ` / ${esc(x.subcategory)}` : '';
