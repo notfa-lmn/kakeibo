@@ -728,9 +728,10 @@
     .auth-btn {
       background: none; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      width: 34px; height: 34px; border-radius: 50%;
+      min-width: 34px; height: 34px; border-radius: 20px;
       background: var(--fill); font-family: inherit;
-      padding: 0;
+      padding: 0 8px 0 4px;
+      max-width: 180px;
     }
     .auth-avatar {
       width: 30px; height: 30px; border-radius: 50%;
@@ -1273,6 +1274,14 @@
     <!-- Category management -->
     <div class="section-title" style="padding-left:0;">支出カテゴリの管理</div>
     <div id="cat-mgr"></div>
+
+    <!-- Account info -->
+    <div class="section-title" style="padding-left:0;">アカウント・同期状態</div>
+    <div class="set-card">
+      <div id="settings-account-info" style="padding:0 4px;">
+        <div style="color:var(--sub);font-size:13px;padding:8px 0;">ログインしていません</div>
+      </div>
+    </div>
 
     <!-- Data backup -->
     <div class="section-title" style="padding-left:0;">データのバックアップ・復元</div>
@@ -2051,12 +2060,25 @@ function showSyncToast(msg) {
 }
 
 async function saveToCloud() {
-  if (!currentUser || !fbDb) return;
+  if (!currentUser || !fbDb) {
+    showErrorToast('⚠️ 未ログインのため、クラウドに保存できていません');
+    return;
+  }
   try {
     await fbDb.collection('users').doc(currentUser.uid).set(JSON.parse(JSON.stringify(D)));
+    updateLastSyncLabel(); // 保存成功時に最終同期時刻を更新
   } catch(e) {
     console.warn('Cloud save failed:', e);
+    showErrorToast('❌ クラウド保存に失敗しました。ネットワークを確認してください。');
   }
+}
+
+function showErrorToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);background:rgba(255,59,48,0.92);color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
 }
 
 // ローカルデータに実質的なデータがあるか判定（空データ上書き防止用）
@@ -2100,6 +2122,7 @@ async function loadFromCloud() {
         generateRecurringIncome(curMonth);
         generateRecurringAnl(curMonth);
         applyNmAdj(curMonth);
+        updateLastSyncLabel();
         renderScreen();
       }
     } else {
@@ -2132,15 +2155,53 @@ function updateAuthUI() {
   if (!btn) return;
   if (currentUser) {
     const name = currentUser.displayName || currentUser.email || 'ユーザー';
+    const email = currentUser.email || '';
     const initial = name.charAt(0).toUpperCase();
-    btn.innerHTML = `<div style="position:relative;"><span class="auth-avatar">${initial}</span><span class="sync-dot"></span></div>`;
-    btn.title = `${name}（タップでログアウト）`;
+    // アバター + メールアドレスを横並びで表示（誤アカウント防止）
+    btn.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div style="position:relative;">
+          <span class="auth-avatar">${initial}</span>
+          <span class="sync-dot" id="sync-dot"></span>
+        </div>
+        <span style="font-size:10px;color:var(--sub);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${email}">${email}</span>
+      </div>`;
+    btn.title = `${name}（${email}）\nタップでログアウト`;
     btn.onclick = signOutUser;
   } else {
     btn.innerHTML = `<span style="font-size:11px;color:var(--sub);">ログイン</span>`;
     btn.title = 'Googleでログイン';
     btn.onclick = signInGoogle;
   }
+  // 設定画面のアカウント情報も更新
+  const accInfo = document.getElementById('settings-account-info');
+  if (accInfo) {
+    if (currentUser) {
+      accInfo.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;">
+          <span style="font-size:28px;font-weight:700;background:var(--primary);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+            ${(currentUser.displayName||currentUser.email||'?').charAt(0).toUpperCase()}
+          </span>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">${currentUser.displayName||''}</div>
+            <div style="font-size:12px;color:var(--primary);font-weight:500;">${currentUser.email||''}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--sub);" id="last-sync-label">最終同期: 未確認</div>`;
+    } else {
+      accInfo.innerHTML = `<div style="color:var(--sub);font-size:13px;padding:8px 0;">ログインしていません</div>`;
+    }
+  }
+}
+
+// 最終クラウド保存時刻を更新
+function updateLastSyncLabel() {
+  const el = document.getElementById('last-sync-label');
+  if (!el) return;
+  const ts = D._savedAt;
+  if (!ts) { el.textContent = '最終同期: 未確認'; return; }
+  const d = new Date(ts);
+  el.textContent = `最終同期: ${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -4755,6 +4816,8 @@ function toggleUnfundedSection() {
 // ═══════════════════════════════════════════════════
 function renderSettings() {
   document.getElementById('settings-month-label').textContent = monthLabel(curMonth);
+  updateAuthUI();       // アカウント情報を最新表示
+  updateLastSyncLabel(); // 最終同期時刻を更新
   // budgets
   const carryoverCats = ['特別費','配当金','敵３','投資待機資金'];
   const monthlyCats   = ['食料品','お小遣い','日用品'];
