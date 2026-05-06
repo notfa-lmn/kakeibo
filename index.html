@@ -2003,6 +2003,11 @@ try {
     if (user) {
       await loadFromCloud();   // 初回：一度だけ取得（ローカルより新しければ適用）
       startRealtimeSync();     // 以降：リアルタイムで他デバイスの変更を受信
+      // ログイン時に未sync保存データがあれば自動再試行
+      if (_pendingCloudSave) {
+        console.log('Retrying pending cloud save after login...');
+        await saveToCloud();
+      }
     } else {
       stopRealtimeSync();
     }
@@ -2059,18 +2064,58 @@ function showSyncToast(msg) {
   setTimeout(() => t.remove(), 3000);
 }
 
+let _pendingCloudSave = false; // 保存失敗データが未sync状態か
+
 async function saveToCloud() {
   if (!currentUser || !fbDb) {
-    showErrorToast('⚠️ 未ログインのため、クラウドに保存できていません');
+    showSaveErrorBanner('⚠️ 未ログインのため、クラウドに保存できていません', null);
+    return;
+  }
+  // データサイズ確認（Firestoreは1ドキュメント1MB上限）
+  let payload;
+  try {
+    payload = JSON.parse(JSON.stringify(D));
+  } catch(e) {
+    showSaveErrorBanner('❌ データのシリアライズに失敗しました', e);
     return;
   }
   try {
-    await fbDb.collection('users').doc(currentUser.uid).set(JSON.parse(JSON.stringify(D)));
+    await fbDb.collection('users').doc(currentUser.uid).set(payload);
+    _pendingCloudSave = false;
     updateLastSyncLabel(); // 保存成功時に最終同期時刻を更新
+    hideSaveErrorBanner();
   } catch(e) {
-    console.warn('Cloud save failed:', e);
-    showErrorToast('❌ クラウド保存に失敗しました。ネットワークを確認してください。');
+    console.error('Cloud save failed:', e);
+    _pendingCloudSave = true;
+    // エラーコードを判別してわかりやすいメッセージに
+    let msg = 'クラウド保存に失敗しました';
+    if (e.code === 'permission-denied') msg = 'クラウド保存に失敗しました（権限エラー: Firestoreのセキュリティルールを確認してください）';
+    else if (e.code === 'unavailable' || e.code === 'resource-exhausted') msg = 'クラウド保存に失敗しました（サーバー一時エラー）';
+    else if (e.message) msg += `（${e.code || e.message}）`;
+    showSaveErrorBanner('❌ ' + msg, e);
   }
+}
+
+// 保存エラーバナー（画面上部に固定表示 + 再試行ボタン）
+function showSaveErrorBanner(msg, err) {
+  let banner = document.getElementById('save-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'save-error-banner';
+    banner.style.cssText = 'position:fixed;top:56px;left:0;right:0;background:rgba(255,59,48,0.95);color:#fff;padding:8px 16px;font-size:13px;font-weight:600;z-index:9998;display:flex;align-items:center;justify-content:space-between;gap:8px;';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `
+    <span style="flex:1;">${msg}</span>
+    <button onclick="saveToCloud()" style="background:rgba(255,255,255,0.25);border:none;color:#fff;font-weight:700;font-size:12px;padding:4px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;">🔄 再試行</button>
+    <button onclick="hideSaveErrorBanner()" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;">✕</button>`;
+  banner.style.display = 'flex';
+  if (err) console.error('[Save Error Detail]', err);
+}
+
+function hideSaveErrorBanner() {
+  const banner = document.getElementById('save-error-banner');
+  if (banner) banner.style.display = 'none';
 }
 
 function showErrorToast(msg) {
@@ -2179,15 +2224,21 @@ function updateAuthUI() {
     if (currentUser) {
       accInfo.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 0;">
-          <span style="font-size:28px;font-weight:700;background:var(--primary);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:28px;font-weight:700;background:var(--primary);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             ${(currentUser.displayName||currentUser.email||'?').charAt(0).toUpperCase()}
           </span>
-          <div>
+          <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:600;color:var(--text);">${currentUser.displayName||''}</div>
-            <div style="font-size:12px;color:var(--primary);font-weight:500;">${currentUser.email||''}</div>
+            <div style="font-size:12px;color:var(--primary);font-weight:500;word-break:break-all;">${currentUser.email||''}</div>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--sub);" id="last-sync-label">最終同期: 未確認</div>`;
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:4px;">
+          <div style="font-size:11px;color:var(--sub);" id="last-sync-label">最終同期: 確認中...</div>
+          <button onclick="saveToCloud().then(()=>showSyncToast('☁️ 同期しました'))"
+            style="font-size:11px;color:var(--primary);background:none;border:1px solid var(--primary);border-radius:6px;padding:3px 8px;cursor:pointer;">
+            🔄 今すぐ同期
+          </button>
+        </div>`;
     } else {
       accInfo.innerHTML = `<div style="color:var(--sub);font-size:13px;padding:8px 0;">ログインしていません</div>`;
     }
