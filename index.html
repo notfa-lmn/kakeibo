@@ -1036,7 +1036,7 @@
     <!-- Date -->
     <div class="fg">
       <label>日付</label>
-      <input class="fi" type="date" id="f-date">
+      <input class="fi" type="date" id="f-date" onchange="refreshPayTypeOptions()">
     </div>
     <!-- 費目 -->
     <div class="fg">
@@ -5890,6 +5890,7 @@ function resetForm() {
   document.getElementById('submit-btn').textContent = '支出を記録';
   document.getElementById('cancel-btn').style.display = 'none';
   document.getElementById('delete-btn').style.display = 'none';
+  refreshPayTypeOptions();
 }
 
 function openEdit(id) {
@@ -5915,12 +5916,27 @@ function openEdit(id) {
   document.getElementById('cancel-btn').style.display = '';
   document.getElementById('delete-btn').style.display = '';
   document.getElementById('hdr-title').textContent = '支出を編集';
+  refreshPayTypeOptions();
   switchScreen('add');
 }
 
 function onPayTypeChange() {
   // 支払元予算は onAmountInput() が支出額から再計算（NO_ROUNDUP_CATSなら支出額と同額）
   onAmountInput();
+}
+
+// 支払種別プルダウンの各オプションに当月の予算残高を併記
+function refreshPayTypeOptions() {
+  const sel = document.getElementById('f-pay');
+  if (!sel) return;
+  const mk = (document.getElementById('f-date')?.value || '').slice(0,7) || curMonth;
+  const payCats = ['食料品','日用品','お小遣い','特別費','配当金','敵３','投資待機資金'];
+  payCats.forEach(cat => {
+    const opt = sel.querySelector(`option[value="${cat}"]`);
+    if (!opt) return;
+    const bal = displayBudgetBalance(mk, cat);
+    opt.textContent = `${cat}（残: ${yenSigned(bal)}）`;
+  });
 }
 
 function onAmountInput() {
