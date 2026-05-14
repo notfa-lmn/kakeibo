@@ -999,14 +999,10 @@
     </div>
   </div>
   <!-- Income row -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 16px 0;">
-    <div class="card tap-card" style="margin:0;" onclick="openIncomeDetail('予算内')">
-      <div class="card-label">今月の収入計（予算内）</div>
-      <div class="card-value" id="income-budget-val" style="font-size:20px;color:var(--success);">¥0</div>
-    </div>
-    <div class="card tap-card" style="margin:0;" onclick="openIncomeDetail('予算外')">
-      <div class="card-label">収入計（予算外）</div>
-      <div class="card-value" id="income-extra-val" style="font-size:20px;color:var(--success);">¥0</div>
+  <div style="margin:8px 16px 0;">
+    <div class="card tap-card" onclick="openIncomeDetail()">
+      <div class="card-label">今月の収入計</div>
+      <div class="card-value" id="income-total-val" style="font-size:20px;color:var(--success);">¥0</div>
     </div>
   </div>
   <!-- Company sales row -->
@@ -1716,33 +1712,15 @@
         <label>日付</label>
         <input class="fi" type="date" id="inc-date">
       </div>
-      <div class="form-row">
-        <div class="fg">
-          <label>収入カテゴリ</label>
-          <select class="fs" id="inc-category" onchange="onIncomeCatChange()">
-            <option value="">選択</option>
-          </select>
-        </div>
-        <div class="fg">
-          <label>内訳</label>
-          <select class="fs" id="inc-subcategory">
-            <option value="">選択</option>
-          </select>
-        </div>
+      <div class="fg">
+        <label>収入カテゴリ</label>
+        <select class="fs" id="inc-category">
+          <option value="">選択</option>
+        </select>
       </div>
-      <div class="form-row">
-        <div class="fg">
-          <label>金額（円）</label>
-          <input class="fi" type="number" id="inc-amount" placeholder="0">
-        </div>
-        <div class="fg">
-          <label>予算区分</label>
-          <select class="fs" id="inc-budget-type">
-            <option value="予算内">予算内</option>
-            <option value="予算外">予算外</option>
-            <option value="なし">なし（会社売上等）</option>
-          </select>
-        </div>
+      <div class="fg">
+        <label>金額（円）</label>
+        <input class="fi" type="number" id="inc-amount" placeholder="0">
       </div>
       <div class="fg">
         <label>メモ（任意）</label>
@@ -2331,14 +2309,9 @@ function getECSubItems(largeCat) {
 // 敵２かどうか
 function isFlat(teki) { return teki !== '敵２'; }
 
-// 収入カテゴリ定義
+// 収入カテゴリ定義（会社売上は別モーダルから登録するためここには含めない）
 const INCOME_CATS = {
-  '給与':       ['給与','ボーナス','その他'],
-  '事業所得':   ['事業所得（SE）','事業所得（ライブ配信）','その他'],
-  '配当金':     ['日本株','米国株','米国債','利息','その他'],
-  '税調整':     ['税調整'],
-  'その他入金': ['その他入金'],
-  '会社売上':   ['ラクマ','その他']  // 会社→個人口座への入金
+  '配当金': []
 };
 
 // ═══════════════════════════════════════════════════
@@ -2890,7 +2863,6 @@ function openIncomeModal(id) {
   Object.keys(INCOME_CATS).forEach(c => {
     catSel.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`;
   });
-  document.getElementById('inc-subcategory').innerHTML = '<option value="">選択</option>';
   document.getElementById('inc-del-btn').style.display = 'none';
 
   if (id) {
@@ -2899,17 +2871,13 @@ function openIncomeModal(id) {
     document.getElementById('income-modal-title').textContent = '収入を編集';
     document.getElementById('inc-date').value = inc.date;
     catSel.value = inc.category;
-    onIncomeCatChange();
-    document.getElementById('inc-subcategory').value = inc.subcategory||'';
     document.getElementById('inc-amount').value = inc.amount;
-    document.getElementById('inc-budget-type').value = inc.budgetType||'予算内';
     document.getElementById('inc-memo').value = inc.memo||'';
     document.getElementById('inc-del-btn').style.display = '';
   } else {
     document.getElementById('income-modal-title').textContent = '収入を追加';
     document.getElementById('inc-date').value = todayStr();
     document.getElementById('inc-amount').value = '';
-    document.getElementById('inc-budget-type').value = '予算内';
     document.getElementById('inc-memo').value = '';
   }
   document.getElementById('income-modal').classList.add('open');
@@ -2917,20 +2885,6 @@ function openIncomeModal(id) {
 
 function closeIncomeModal() {
   document.getElementById('income-modal').classList.remove('open');
-}
-
-function onIncomeCatChange() {
-  const cat = document.getElementById('inc-category').value;
-  const subSel = document.getElementById('inc-subcategory');
-  subSel.innerHTML = '<option value="">選択</option>';
-  if (!cat || !INCOME_CATS[cat]) return;
-  INCOME_CATS[cat].forEach(item => {
-    subSel.innerHTML += `<option value="${esc(item)}">${esc(item)}</option>`;
-  });
-  // 会社売上は予算区分を「なし」に自動設定
-  if (cat === '会社売上') {
-    document.getElementById('inc-budget-type').value = 'なし';
-  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -3186,14 +3140,13 @@ function adjustDividendAdj(md, oldCat, oldAmt, newCat, newAmt) {
 function submitIncome() {
   const date     = document.getElementById('inc-date').value;
   const category = document.getElementById('inc-category').value;
-  const subcat   = document.getElementById('inc-subcategory').value;
   const amount   = parseFloat(document.getElementById('inc-amount').value)||0;
   if (!date || !category || amount <= 0) { alert('日付・カテゴリ・金額を入力してください'); return; }
   const mk  = date.slice(0,7);
   const md  = mdata(mk);
   const obj = {
-    date, category, subcategory: subcat,
-    amount, budgetType: document.getElementById('inc-budget-type').value,
+    date, category,
+    amount,
     memo: document.getElementById('inc-memo').value.trim()
   };
   if (editIncomeId) {
@@ -4514,8 +4467,11 @@ function renderSummary() {
   document.getElementById('total-val').textContent = yen(totalExpenses(curMonth));
   document.getElementById('credit-total-val').textContent = yen(creditTotal(curMonth));
   document.getElementById('nocc-total-val').textContent = yen(noCcTotal(curMonth));
-  document.getElementById('income-budget-val').textContent = yen(totalIncome(curMonth,'予算内'));
-  document.getElementById('income-extra-val').textContent = yen(totalIncome(curMonth,'予算外'));
+  // 収入計（会社売上を除く全収入）
+  const totalRegularIncome = (mdata(curMonth).incomes||[])
+    .filter(x => x.category !== '会社売上')
+    .reduce((s,x) => s + (x.amount||0), 0);
+  document.getElementById('income-total-val').textContent = yen(totalRegularIncome);
   document.getElementById('company-balance-val').textContent = yen(companyBalance(curMonth));
   document.getElementById('company-income-val').textContent = yen(companyIncomeForMonth(curMonth));
   document.getElementById('company-withdrawal-val').textContent = yen(companyWithdrawalForMonth(curMonth));
@@ -4603,10 +4559,10 @@ function openCompanySalesDetail() {
   openDetailModal(title, html);
 }
 
-function openIncomeDetail(budgetType) {
+function openIncomeDetail() {
   const all = mdata(curMonth).incomes || [];
-  const list = all.filter(x => x.budgetType === budgetType).sort((a,b) => a.date.localeCompare(b.date));
-  const title = `収入一覧（${budgetType}）`;
+  const list = all.filter(x => x.category !== '会社売上').sort((a,b) => a.date.localeCompare(b.date));
+  const title = '収入一覧';
   if (!list.length) {
     openDetailModal(title, `<div style="text-align:center;padding:32px;color:var(--sub);">収入の記録がありません</div>`);
     return;
@@ -4615,11 +4571,10 @@ function openIncomeDetail(budgetType) {
   let html = `<div style="text-align:right;font-size:13px;color:var(--sub);margin-bottom:12px;">合計: <strong style="color:var(--success);font-size:16px;">${yen(total)}</strong></div>`;
   html += '<div class="detail-block">';
   list.forEach(x => {
-    const sub = x.subcategory ? ` · ${esc(x.subcategory)}` : '';
     const memo = x.memo ? ` · ${esc(x.memo)}` : '';
     html += `<div class="detail-inc-row" onclick="closeDetailModal();openIncomeModal('${x.id}')">
       <div>
-        <div style="font-size:14px;font-weight:500;">${esc(x.category)}${sub}</div>
+        <div style="font-size:14px;font-weight:500;">${esc(x.category)}</div>
         <div style="font-size:12px;color:var(--sub);">${x.date}${memo}</div>
       </div>
       <div style="font-size:15px;font-weight:700;color:var(--success);">${yen(x.amount)}</div>
@@ -4772,9 +4727,13 @@ function renderList() {
   const companySales = listFilter === 'all'
     ? (md.incomes||[]).filter(x => x.category === '会社売上').map(x => ({...x, _type:'company'}))
     : [];
+  const regularIncomes = listFilter === 'all'
+    ? (md.incomes||[]).filter(x => x.category !== '会社売上').map(x => ({...x, _type:'income'}))
+    : [];
   const items = [
     ...expenseItems.map(e => ({...e, _type:'expense'})),
     ...companySales,
+    ...regularIncomes,
   ].sort((a,b) => b.date.localeCompare(a.date));
   if (!items.length && !unfunded.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
@@ -4804,14 +4763,12 @@ function renderList() {
             <div class="inc-amount" style="color:${color};">${sign}${yen(x.amount)}</div>
           </div>`;
       } else if (x._type === 'income') {
-        const sub = x.subcategory ? ` / ${esc(x.subcategory)}` : '';
-        const bt = x.budgetType === '予算外' ? `<span class="tbadge" style="background:rgba(255,149,0,0.15);color:var(--warning);">予算外</span>` : `<span class="tbadge" style="background:rgba(52,199,89,0.15);color:var(--success);">予算内</span>`;
         html += `
           <div class="income-row" onclick="openIncomeModal('${x.id}')">
             <div class="inc-icon">💰</div>
             <div class="inc-info">
-              <div class="inc-name">${esc(x.category)}${sub}</div>
-              <div class="inc-meta">${bt}${x.memo ? ` ${esc(x.memo)}` : ''}</div>
+              <div class="inc-name">${esc(x.category)}</div>
+              <div class="inc-meta">${x.memo ? esc(x.memo) : ''}</div>
             </div>
             <div class="inc-amount">+${yen(x.amount)}</div>
           </div>`;
