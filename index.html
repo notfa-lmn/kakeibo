@@ -5931,11 +5931,13 @@ function refreshPayTypeOptions() {
   if (!sel) return;
   const mk = (document.getElementById('f-date')?.value || '').slice(0,7) || curMonth;
   const payCats = ['食料品','日用品','お小遣い','特別費','配当金','敵３','投資待機資金'];
+  const maxLen = Math.max(...payCats.map(c => c.length));
   payCats.forEach(cat => {
     const opt = sel.querySelector(`option[value="${cat}"]`);
     if (!opt) return;
     const bal = displayBudgetBalance(mk, cat);
-    opt.textContent = `${cat}（残: ${yenSigned(bal)}）`;
+    const padding = '　'.repeat(maxLen - cat.length);
+    opt.textContent = `${cat}${padding}（残: ${yenSigned(bal)}）`;
   });
 }
 
