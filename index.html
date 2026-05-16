@@ -4837,7 +4837,20 @@ function renderSettings() {
              onfocus="unfmtInput(this)"
              onblur="fmtInput(this);saveBudget('${cat}',this.value)">
     </div>`;
-  document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(budgetRow).join('');
+  const prevKey = prevMk(curMonth);
+  const carryoverRow = cat => {
+    const prevBal = D.months[prevKey] ? displayBudgetBalance(prevKey, cat) : 0;
+    return `
+    <div class="set-row" style="flex-wrap:wrap;">
+      <span class="set-label">${esc(cat)}</span>
+      <input class="set-input" type="text" inputmode="numeric"
+             value="${fmtYenVal(D.settings.budgets[cat]||0)}"
+             onfocus="unfmtInput(this)"
+             onblur="fmtInput(this);saveBudget('${cat}',this.value)">
+      <div style="flex-basis:100%;font-size:11px;color:var(--sub);margin-top:4px;text-align:right;">前月繰越: ${yenSigned(prevBal)}</div>
+    </div>`;
+  };
+  document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(carryoverRow).join('');
   document.getElementById('budget-settings-monthly').innerHTML   = monthlyCats.map(budgetRow).join('');
   // adjustments（マイナス入力可 → inputmode="text"でフルキーボード）
   const md = mdata(curMonth);
