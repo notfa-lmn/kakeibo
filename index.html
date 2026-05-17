@@ -971,9 +971,11 @@
 
   <!-- Bank balance -->
   <div class="bank-card">
-    <div class="bank-card-label">楽天銀行残高（理論値）</div>
-    <div class="bank-card-value" id="bank-val">¥0</div>
-    <div class="bank-card-detail" id="bank-detail"></div>
+    <div onclick="openBankDetail()" style="cursor:pointer;">
+      <div class="bank-card-label">楽天銀行残高（理論値）</div>
+      <div class="bank-card-value" id="bank-val">¥0</div>
+      <div class="bank-card-detail" id="bank-detail"></div>
+    </div>
     <div class="credit-row">
       <span class="credit-label">前月クレジット支払額</span>
       <input class="credit-input" type="text" inputmode="numeric" id="prev-credit-input"
@@ -4516,6 +4518,65 @@ function openDetailModal(title, bodyHtml) {
 }
 function closeDetailModal() {
   document.getElementById('detail-modal').classList.remove('open');
+}
+
+function openBankDetail() {
+  const md = mdata(curMonth);
+  const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
+  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
+  const prevCredit = md.prevCredit || 0;
+  const companyNet = companyNetForMonth(curMonth);
+  const total = budgetSum + transferSum + prevCredit + companyNet;
+
+  // 予算カテゴリ別の内訳
+  let catRows = '';
+  CATS.forEach(cat => {
+    const bal = budgetBalance(curMonth, cat);
+    catRows += `
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:3px 0;">
+        <span style="padding-left:12px;">└ ${esc(cat)}</span><span>${yenSigned(bal)}</span>
+      </div>`;
+  });
+
+  // 銀行振込の内訳（CC対象外の支出）
+  const noCcExpenses = (md.expenses||[]).filter(e => e.noCc && e.transferAmt > 0)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  let transferRows = '';
+  noCcExpenses.forEach(e => {
+    transferRows += `
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:3px 0;">
+        <span style="padding-left:12px;">└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>${yen(e.transferAmt||0)}</span>
+      </div>`;
+  });
+
+  const row = (label, val, color) => `
+    <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;${color?'color:'+color+';':''}">
+      <span>${label}</span><span style="font-weight:600;">${yenSigned(val)}</span>
+    </div>`;
+
+  let html = `
+    <div style="background:var(--fill);border-radius:10px;padding:14px;margin-bottom:14px;">
+      ${row('予算残高合計', budgetSum)}
+      ${catRows}
+      <div style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:6px;"></div>
+      ${row('銀行振込合計（CC対象外）', transferSum)}
+      ${transferRows}
+      <div style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:6px;"></div>
+      ${row('前月クレジット支払額', prevCredit)}
+      ${row('会社売上 当月純額', companyNet)}
+      <div style="border-top:1px solid var(--sep);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
+        <span>合計（理論値）</span><span>${yenSigned(total)}</span>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);line-height:1.6;padding:0 4px;">
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px;">計算式</div>
+      予算残高合計 ＋ 銀行振込合計 ＋ 前月CC ＋ 会社売上純額<br><br>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px;">予算残高の構成</div>
+      各カテゴリの「基本予算 ＋ 当月調整 ＋ 前月繰越（積立のみ）」の合計。<br>
+      当月の支出は直接控除されず、CC分は来月の「前月クレジット支払額」、非CC分は予算残高の減少として反映されます。
+    </div>`;
+
+  openDetailModal('🏦 楽天銀行残高（理論値）内訳', html);
 }
 
 function openCompanySalesDetail() {
