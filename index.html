@@ -2521,9 +2521,9 @@ function bankBalance(mk) {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e) => s + (e.transferAmt||0), 0);
   const prevCredit = md.prevCredit || 0;
-  // 会社売上は当月の純増（入金−出金）のみ反映
-  const companyNet = companyNetForMonth(mk);
-  return budgetSum + transferSum + prevCredit + companyNet;
+  // 会社売上は累計残高（前月繰越＋当月純増）を反映
+  const companyBal = companyBalance(mk);
+  return budgetSum + transferSum + prevCredit + companyBal;
 }
 
 function totalExpenses(mk) {
@@ -4525,8 +4525,8 @@ function openBankDetail() {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
-  const companyNet = companyNetForMonth(curMonth);
-  const total = budgetSum + transferSum + prevCredit + companyNet;
+  const companyBal = companyBalance(curMonth);
+  const total = budgetSum + transferSum + prevCredit + companyBal;
 
   // 予算カテゴリ別の内訳
   let catRows = '';
@@ -4563,14 +4563,14 @@ function openBankDetail() {
       ${transferRows}
       <div style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:6px;"></div>
       ${row('前月クレジット支払額', prevCredit)}
-      ${row('会社売上 当月純額', companyNet)}
+      ${row('会社口座残高（累計）', companyBal)}
       <div style="border-top:1px solid var(--sep);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
         <span>合計（理論値）</span><span>${yenSigned(total)}</span>
       </div>
     </div>
     <div style="font-size:11px;color:var(--sub);line-height:1.6;padding:0 4px;">
       <div style="font-weight:600;color:var(--text);margin-bottom:4px;">計算式</div>
-      予算残高合計 ＋ 銀行振込合計 ＋ 前月CC ＋ 会社売上純額<br><br>
+      予算残高合計 ＋ 銀行振込合計 ＋ 前月CC ＋ 会社口座残高（累計）<br><br>
       <div style="font-weight:600;color:var(--text);margin-bottom:4px;">予算残高の構成</div>
       各カテゴリの「基本予算 ＋ 当月調整 ＋ 前月繰越（積立のみ）」の合計。<br>
       当月の支出は直接控除されず、CC分は来月の「前月クレジット支払額」、非CC分は予算残高の減少として反映されます。
@@ -4709,11 +4709,11 @@ function refreshBankDisplay() {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
-  const companyNet = companyNetForMonth(curMonth);
-  const total = budgetSum + transferSum + prevCredit + companyNet;
+  const companyBal = companyBalance(curMonth);
+  const total = budgetSum + transferSum + prevCredit + companyBal;
   document.getElementById('bank-val').textContent = yenSigned(total);
   const detailParts = [`予算残高: ${yenSigned(budgetSum)}`, `銀行振込: ${yen(transferSum)}`, `前月CC: ${yenSigned(prevCredit)}`];
-  if (companyNet !== 0) detailParts.push(`会社売上(純): ${yenSigned(companyNet)}`);
+  if (companyBal !== 0) detailParts.push(`会社口座: ${yenSigned(companyBal)}`);
   document.getElementById('bank-detail').textContent = detailParts.join('　');
   const pcEl = document.getElementById('prev-credit-input');
   if (document.activeElement !== pcEl) {
