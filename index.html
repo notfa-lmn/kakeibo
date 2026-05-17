@@ -4478,6 +4478,7 @@ function renderSummary() {
   const grid = document.getElementById('budget-grid');
   grid.innerHTML = '';
   const md = mdata(curMonth);
+  const sumPrevKey = prevMk(curMonth);
   SUMMARY_TILE_CATS.forEach(cat => {
     const base = D.settings.budgets[cat]||0;
     const adj  = (md.adj||{})[cat]||0;
@@ -4488,6 +4489,13 @@ function renderSummary() {
     const cls = bal < 0 ? 'bad' : bal < effectiveBudget*0.2 ? 'warn' : 'ok';
     const bcls = bal < 0 ? 'bar-bad' : bal < effectiveBudget*0.2 ? 'bar-warn' : 'bar-ok';
     const adjLabel = (!isCarryover && adj !== 0) ? ` (調整${adj>0?'+':''}${yen(adj)})` : '';
+    let detailText;
+    if (isCarryover) {
+      const prevBal = D.months[sumPrevKey] ? displayBudgetBalance(sumPrevKey, cat) : 0;
+      detailText = `前月繰越: ${yen(prevBal)} ＋ 当月調整: ${yenSigned(adj)}`;
+    } else {
+      detailText = `予算: ${yen(effectiveBudget)}${adjLabel}`;
+    }
     const cell = document.createElement('div');
     cell.className = 'budget-cell tap-card';
     cell.onclick = () => openBudgetDetail(cat);
@@ -4495,7 +4503,7 @@ function renderSummary() {
       <div class="bc-name">${esc(cat)}${isCarryover ? ' <span style="font-size:9px;background:rgba(0,122,255,0.12);color:var(--primary);padding:1px 4px;border-radius:3px;">積立</span>' : ''}</div>
       <div class="bc-balance ${cls}">${bal<0?'-':''}${yen(bal)}</div>
       <div class="bc-bar-wrap"><div class="bc-bar ${bcls}" style="width:${pct}%"></div></div>
-      <div class="bc-detail">${isCarryover ? '月次積立' : '予算'}: ${yen(effectiveBudget)}${adjLabel}</div>`;
+      <div class="bc-detail">${detailText}</div>`;
     grid.appendChild(cell);
   });
 }
@@ -4841,13 +4849,11 @@ function renderSettings() {
   const carryoverRow = cat => {
     const prevBal = D.months[prevKey] ? displayBudgetBalance(prevKey, cat) : 0;
     return `
-    <div class="set-row" style="flex-wrap:wrap;">
+    <div class="set-row">
       <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="text" inputmode="numeric"
-             value="${fmtYenVal(D.settings.budgets[cat]||0)}"
-             onfocus="unfmtInput(this)"
-             onblur="fmtInput(this);saveBudget('${cat}',this.value)">
-      <div style="flex-basis:100%;font-size:11px;color:var(--sub);margin-top:4px;text-align:right;">前月繰越: ${yenSigned(prevBal)}</div>
+      <input class="set-input" type="text" readonly
+             value="${fmtYenVal(prevBal)}"
+             style="color:var(--sub);cursor:default;">
     </div>`;
   };
   document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(carryoverRow).join('');
