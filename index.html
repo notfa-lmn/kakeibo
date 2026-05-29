@@ -955,6 +955,7 @@
   <div class="sb-section-title">追加する</div>
   <button class="sb-add-btn" onclick="switchScreen('add')">💸 支出を手入力</button>
   <button class="sb-add-btn" onclick="openIncomeModal()">💰 収入を追加</button>
+  <button class="sb-add-btn" onclick="openWithdrawalModal()">🏦 出金を記録</button>
   <button class="sb-add-btn" onclick="openCompanySalesModal()">🏢 会社売上</button>
 </aside>
 
@@ -1322,6 +1323,7 @@
       <button class="fab-menu-btn" onclick="closeFabMenu();openFabReceipt()">📷 レシートを撮影</button>
       <button class="fab-menu-btn" onclick="closeFabMenu();switchScreen('add')">💸 支出を手入力</button>
       <button class="fab-menu-btn" onclick="closeFabMenu();openIncomeModal()">💰 収入を追加</button>
+      <button class="fab-menu-btn" onclick="closeFabMenu();openWithdrawalModal()">🏦 出金を記録</button>
       <button class="fab-menu-btn" onclick="closeFabMenu();openCompanySalesModal()">🏢 会社売上を手入力</button>
     </div>
   </div>
@@ -1734,6 +1736,40 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════ WITHDRAWAL MODAL -->
+<div class="overlay" id="withdrawal-modal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="withdrawal-modal-title">出金を記録</span>
+      <button class="sheet-close" onclick="closeWithdrawalModal()">✕</button>
+    </div>
+    <div class="form-wrap" style="padding-top:0;">
+      <div class="fg">
+        <label>日付</label>
+        <input class="fi" type="date" id="wd-date">
+      </div>
+      <div class="fg">
+        <label>出金元（予算カテゴリ）</label>
+        <select class="fs" id="wd-category">
+          <option value="">選択</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>出金額（円）</label>
+        <input class="fi" type="number" id="wd-amount" placeholder="0">
+      </div>
+      <div class="fg">
+        <label>出金先・用途（任意）</label>
+        <input class="fi" type="text" id="wd-memo" placeholder="例：事業口座へ移動など">
+      </div>
+      <div class="set-note">※ 選択した予算カテゴリの残高と楽天銀行残高（理論値）から差し引かれます</div>
+      <button class="btn btn-p" style="background:var(--danger);" onclick="submitWithdrawal()">出金を記録</button>
+      <button class="btn btn-d" id="wd-del-btn" style="display:none;" onclick="deleteWithdrawal()">削除する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════ COMPANY SALES MODAL -->
 <div class="overlay" id="company-sales-modal">
   <div class="sheet">
@@ -2009,9 +2045,10 @@ function startRealtimeSync() {
       // クラウドデータが空/不正なら適用しない（空データ上書き防止）
       if (!cloud || !cloud.settings || !cloud.months) return;
       const cloudHasData = Object.values(cloud.months).some(m =>
-        (m.expenses  && m.expenses.length  > 0) ||
-        (m.incomes   && m.incomes.length   > 0) ||
-        (m.mfRecords && m.mfRecords.length > 0)
+        (m.expenses    && m.expenses.length    > 0) ||
+        (m.incomes     && m.incomes.length     > 0) ||
+        (m.withdrawals && m.withdrawals.length > 0) ||
+        (m.mfRecords   && m.mfRecords.length   > 0)
       );
       if (!cloudHasData) return; // クラウドが空なら無視
       const cloudTs = cloud._savedAt || 0;
@@ -2110,9 +2147,10 @@ function showErrorToast(msg) {
 function hasLocalData() {
   if (!D || !D.months) return false;
   return Object.values(D.months).some(m =>
-    (m.expenses  && m.expenses.length  > 0) ||
-    (m.incomes   && m.incomes.length   > 0) ||
-    (m.mfRecords && m.mfRecords.length > 0)
+    (m.expenses    && m.expenses.length    > 0) ||
+    (m.incomes     && m.incomes.length     > 0) ||
+    (m.withdrawals && m.withdrawals.length > 0) ||
+    (m.mfRecords   && m.mfRecords.length   > 0)
   );
 }
 
@@ -2394,6 +2432,7 @@ function mdata(key) {
   if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
   if (!D.months[key].adj) D.months[key].adj = {};
   if (!D.months[key].incomes) D.months[key].incomes = [];
+  if (!D.months[key].withdrawals) D.months[key].withdrawals = [];
   if (!D.months[key].anlEntries) D.months[key].anlEntries = [];
   if (D.months[key].recAnlDone === undefined) D.months[key].recAnlDone = false;
   if (D.months[key].recTeki3Done === undefined) D.months[key].recTeki3Done = false;
@@ -2445,6 +2484,13 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 // ═══════════════════════════════════════════════════
 //  CALCULATIONS
 // ═══════════════════════════════════════════════════
+// 当月の出金（楽天銀行からの引き出し）合計：カテゴリ別
+function withdrawalSum(mk, cat) {
+  return (mdata(mk).withdrawals||[])
+    .filter(w => w.cat === cat)
+    .reduce((s,w) => s + (w.amount||0), 0);
+}
+
 function budgetBalance(mk, cat) {
   const md = mdata(mk);
   const base = D.settings.budgets[cat] || 0;
@@ -2455,6 +2501,8 @@ function budgetBalance(mk, cat) {
   if (CARRYOVER_CATS.has(cat) && D.months[prevKey]) {
     total += displayBudgetBalance(prevKey, cat);
   }
+  // 当月の出金（事業口座への移動等）を差し引く
+  total -= withdrawalSum(mk, cat);
   return total;
 }
 
@@ -3184,6 +3232,71 @@ function totalIncome(mk, budgetType) {
   return budgetType
     ? incomes.filter(x => x.budgetType === budgetType).reduce((s,x) => s+x.amount, 0)
     : incomes.reduce((s,x) => s+x.amount, 0);
+}
+
+// ═══════════════════════════════════════════════════
+//  WITHDRAWAL（楽天銀行からの出金 → 事業口座への移動等）
+// ═══════════════════════════════════════════════════
+let editWithdrawalId = null;
+
+function openWithdrawalModal(id) {
+  editWithdrawalId = id || null;
+  const catSel = document.getElementById('wd-category');
+  catSel.innerHTML = '<option value="">選択</option>';
+  CATS.forEach(c => {
+    catSel.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`;
+  });
+  document.getElementById('wd-del-btn').style.display = 'none';
+
+  if (id) {
+    const wd = (mdata(curMonth).withdrawals||[]).find(x => x.id === id);
+    if (!wd) return;
+    document.getElementById('withdrawal-modal-title').textContent = '出金を編集';
+    document.getElementById('wd-date').value = wd.date;
+    catSel.value = wd.cat;
+    document.getElementById('wd-amount').value = wd.amount;
+    document.getElementById('wd-memo').value = wd.memo||'';
+    document.getElementById('wd-del-btn').style.display = '';
+  } else {
+    document.getElementById('withdrawal-modal-title').textContent = '出金を記録';
+    document.getElementById('wd-date').value = todayStr();
+    document.getElementById('wd-amount').value = '';
+    document.getElementById('wd-memo').value = '';
+  }
+  document.getElementById('withdrawal-modal').classList.add('open');
+}
+
+function closeWithdrawalModal() {
+  document.getElementById('withdrawal-modal').classList.remove('open');
+}
+
+function submitWithdrawal() {
+  const date   = document.getElementById('wd-date').value;
+  const cat    = document.getElementById('wd-category').value;
+  const amount = parseFloat(document.getElementById('wd-amount').value)||0;
+  if (!date || !cat || amount <= 0) { alert('日付・出金元カテゴリ・金額を入力してください'); return; }
+  const mk  = date.slice(0,7);
+  const md  = mdata(mk);
+  const obj = { date, cat, amount, memo: document.getElementById('wd-memo').value.trim() };
+  if (editWithdrawalId) {
+    const idx = md.withdrawals.findIndex(x => x.id === editWithdrawalId);
+    if (idx !== -1) md.withdrawals[idx] = { ...md.withdrawals[idx], ...obj };
+  } else {
+    md.withdrawals.push({ id: uid(), ...obj });
+  }
+  save();
+  closeWithdrawalModal();
+  curMonth = mk;
+  renderScreen();
+}
+
+function deleteWithdrawal() {
+  if (!editWithdrawalId || !confirm('この出金記録を削除しますか？')) return;
+  const md = mdata(curMonth);
+  md.withdrawals = (md.withdrawals||[]).filter(x => x.id !== editWithdrawalId);
+  save();
+  closeWithdrawalModal();
+  renderScreen();
 }
 
 // ═══════════════════════════════════════════════════
@@ -4701,6 +4814,31 @@ function openBudgetDetail(cat) {
     });
   }
   html += '</div>';
+
+  // 出金（楽天銀行からの引き出し）
+  const withdrawals = (md.withdrawals || [])
+    .filter(w => w.cat === cat)
+    .sort((a,b) => a.date.localeCompare(b.date));
+  if (withdrawals.length) {
+    const wdTotal = withdrawals.reduce((s,w) => s + (w.amount||0), 0);
+    html += `<div class="detail-block">
+      <div class="detail-block-title">出金</div>
+      <div style="display:flex;justify-content:space-between;padding:0 0 10px;border-bottom:0.5px solid var(--sep);margin-bottom:4px;">
+        <span style="font-size:13px;color:var(--sub);">合計出金</span>
+        <span style="font-weight:700;font-size:15px;color:var(--danger);">-${yen(wdTotal)}</span>
+      </div>`;
+    withdrawals.forEach(w => {
+      html += `<div class="detail-exp-row" onclick="closeDetailModal();openWithdrawalModal('${w.id}')" style="cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">🏦 出金${w.memo ? ` · ${esc(w.memo)}` : ''}</div>
+          <div style="font-size:12px;color:var(--sub);">${w.date}</div>
+        </div>
+        <div style="font-size:15px;font-weight:600;color:var(--danger);">-${yen(w.amount)}</div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
   openDetailModal(`${cat} の明細`, html);
 }
 
@@ -4799,10 +4937,14 @@ function renderList() {
   const regularIncomes = listFilter === 'all'
     ? (md.incomes||[]).filter(x => x.category !== '会社売上').map(x => ({...x, _type:'income'}))
     : [];
+  const withdrawals = listFilter === 'all'
+    ? (md.withdrawals||[]).map(x => ({...x, _type:'withdrawal'}))
+    : [];
   const items = [
     ...expenseItems.map(e => ({...e, _type:'expense'})),
     ...companySales,
     ...regularIncomes,
+    ...withdrawals,
   ].sort((a,b) => b.date.localeCompare(a.date));
   if (!items.length && !unfunded.length) {
     el.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div>データがありません</div></div>`;
@@ -4840,6 +4982,16 @@ function renderList() {
               <div class="inc-meta">${x.memo ? esc(x.memo) : ''}</div>
             </div>
             <div class="inc-amount">+${yen(x.amount)}</div>
+          </div>`;
+      } else if (x._type === 'withdrawal') {
+        html += `
+          <div class="income-row" onclick="openWithdrawalModal('${x.id}')">
+            <div class="inc-icon" style="color:var(--danger);">🏦</div>
+            <div class="inc-info">
+              <div class="inc-name" style="color:var(--danger);">出金 / ${esc(x.cat)}</div>
+              <div class="inc-meta"><span class="tbadge" style="background:var(--fill);color:var(--sub);">出金</span>${x.memo ? ` ${esc(x.memo)}` : ''}</div>
+            </div>
+            <div class="inc-amount" style="color:var(--danger);">-${yen(x.amount)}</div>
           </div>`;
       } else {
         const e = x;
