@@ -336,11 +336,15 @@
     }
     .csv-item.ok { border-left-color: var(--success); }
     .csv-item.ng { border-left-color: var(--danger); }
+    .csv-item.extra { border-left-color: var(--warning); }
     .csv-item-name { font-size: 13px; font-weight: 500; }
     .csv-item-detail { font-size: 11px; color: var(--sub); margin-top: 3px; }
     .csv-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 500; margin-right: 4px; }
     .tag-ok { background: rgba(52,199,89,0.15); color: var(--success); }
     .tag-ng { background: rgba(255,59,48,0.15); color: var(--danger); }
+    .tag-extra { background: rgba(255,159,10,0.15); color: var(--warning); }
+    .csv-tile { flex:1; border-radius:8px; padding:10px; text-align:center; cursor:pointer; border:2px solid transparent; transition:border-color 0.15s; }
+    .csv-tile.active { border-color: currentColor; }
 
     /* misc */
     input[type=number] { -moz-appearance: textfield; }
@@ -6618,6 +6622,9 @@ function handleCsv(ev) {
 }
 
 let _lastCsvResult = []; // 照合結果キャッシュ（ダウンロード用）
+let _lastCsvAllItems = []; // 全表示行キャッシュ（フィルター切替用）
+let _lastCsvCounts = { match:0, miss:0, extra:0, csvN:0, expN:0 };
+let _csvFilter = 'all'; // 'all' | 'match' | 'miss' | 'extra'
 
 function processCsv(raw) {
   const lines = raw.split(/\r?\n/).filter(l => l.trim());
@@ -6659,48 +6666,95 @@ function processCsv(raw) {
   }
 
   const md = mdata(curMonth);
-  const exps = md.expenses||[];
-  let matchN = 0, missN = 0;
-  let itemsHtml = '';
+  // 楽天カード対象（CC利用）の支出のみ照合対象。noCc（銀行引落）はカード明細に含まれないため除外
+  const exps = (md.expenses||[]).filter(e => !e.noCc);
+
+  // ペアリング（同じ日付・金額を1対1で消費）
+  const expMatched = new Array(exps.length).fill(false);
+  const allItems = [];
+  let matchN = 0, missN = 0, extraN = 0;
   _lastCsvResult = [];
 
   csvItems.forEach(ci => {
-    const found = exps.find(e => e.amount === ci.amount && e.date === ci.date);
-    const status = found ? '一致' : '未入力';
-    const entryName = found ? (found.name || '') : '';
-    _lastCsvResult.push({ ...ci, status, entryName });
-    if (found) {
+    const ei = exps.findIndex((e, idx) => !expMatched[idx] && e.amount === ci.amount && e.date === ci.date);
+    if (ei >= 0) {
+      expMatched[ei] = true;
+      const exp = exps[ei];
       matchN++;
-      itemsHtml += `
-        <div class="csv-item ok">
-          <div class="csv-item-name"><span class="csv-tag tag-ok">一致</span>${esc(ci.name)}</div>
-          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}${entryName ? `　→ ${esc(entryName)}` : ''}</div>
-        </div>`;
+      allItems.push({ kind:'match', date:ci.date, name:ci.name, amount:ci.amount, entryName: exp.name||'', expId: exp.id });
+      _lastCsvResult.push({ date:ci.date, name:ci.name, amount:ci.amount, status:'一致', entryName: exp.name||'' });
     } else {
       missN++;
-      itemsHtml += `
-        <div class="csv-item ng">
-          <div class="csv-item-name"><span class="csv-tag tag-ng">未入力</span>${esc(ci.name)}</div>
-          <div class="csv-item-detail">${ci.date}　${yen(ci.amount)}</div>
-        </div>`;
+      allItems.push({ kind:'miss', date:ci.date, name:ci.name, amount:ci.amount });
+      _lastCsvResult.push({ date:ci.date, name:ci.name, amount:ci.amount, status:'未入力', entryName:'' });
+    }
+  });
+  exps.forEach((e, i) => {
+    if (!expMatched[i]) {
+      extraN++;
+      allItems.push({ kind:'extra', date:e.date, name:e.name||'', amount:e.amount||0, expId: e.id });
+      _lastCsvResult.push({ date:e.date, name:e.name||'', amount:e.amount||0, status:'手入力のみ', entryName:'' });
     }
   });
 
+  _lastCsvAllItems = allItems;
+  _lastCsvCounts = { match:matchN, miss:missN, extra:extraN, csvN: csvItems.length, expN: exps.length };
+  _csvFilter = 'all';
+  renderCsvResult();
+}
+
+function setCsvFilter(f) {
+  _csvFilter = (_csvFilter === f) ? 'all' : f;
+  renderCsvResult();
+}
+
+function renderCsvResult() {
+  const c = _lastCsvCounts;
+  const items = _lastCsvAllItems;
+  const tile = (filter, n, label, color) => {
+    const active = _csvFilter === filter;
+    return `<div class="csv-tile${active?' active':''}" style="background:${color}1A;color:${color};" onclick="setCsvFilter('${filter}')">
+      <div style="font-size:22px;font-weight:700;">${n}</div>
+      <div style="font-size:11px;color:var(--sub);">${label}</div>
+    </div>`;
+  };
   const summaryHtml = `
     <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <div style="flex:1;background:rgba(52,199,89,0.1);border-radius:8px;padding:10px;text-align:center;">
-        <div style="font-size:22px;font-weight:700;color:var(--success);">${matchN}</div>
-        <div style="font-size:11px;color:var(--sub);">一致</div>
-      </div>
-      <div style="flex:1;background:rgba(255,59,48,0.1);border-radius:8px;padding:10px;text-align:center;">
-        <div style="font-size:22px;font-weight:700;color:var(--danger);">${missN}</div>
-        <div style="font-size:11px;color:var(--sub);">未入力</div>
-      </div>
+      ${tile('match', c.match, '一致', '#34c759')}
+      ${tile('miss',  c.miss,  '未入力',  '#ff3b30')}
+      ${tile('extra', c.extra, '未照合',  '#ff9f0a')}
     </div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${csvItems.length}件 / 手入力: ${exps.length}件</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${c.csvN}件 / 手入力(CC): ${c.expN}件${_csvFilter!=='all'?'　<span style="color:var(--primary);cursor:pointer;" onclick="setCsvFilter(\''+_csvFilter+'\')">［フィルター解除］</span>':''}</div>
     <button onclick="downloadCsvResult()" style="width:100%;padding:10px;margin-bottom:12px;background:var(--fill);border:none;border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
       ⬇️ 照合結果をCSVでダウンロード
     </button>`;
+
+  const filtered = _csvFilter === 'all' ? items : items.filter(x => x.kind === _csvFilter);
+  let itemsHtml = '';
+  if (!filtered.length) {
+    itemsHtml = `<div style="text-align:center;padding:24px;color:var(--sub);font-size:13px;">該当する項目がありません</div>`;
+  }
+  filtered.forEach(x => {
+    if (x.kind === 'match') {
+      itemsHtml += `
+        <div class="csv-item ok" style="cursor:pointer;" onclick="closeCsvModal();openEdit('${x.expId}')">
+          <div class="csv-item-name"><span class="csv-tag tag-ok">一致</span>${esc(x.name)}</div>
+          <div class="csv-item-detail">${x.date}　${yen(x.amount)}${x.entryName ? `　→ ${esc(x.entryName)}` : ''}</div>
+        </div>`;
+    } else if (x.kind === 'miss') {
+      itemsHtml += `
+        <div class="csv-item ng">
+          <div class="csv-item-name"><span class="csv-tag tag-ng">未入力</span>${esc(x.name)}</div>
+          <div class="csv-item-detail">${x.date}　${yen(x.amount)}</div>
+        </div>`;
+    } else { // extra
+      itemsHtml += `
+        <div class="csv-item extra" style="cursor:pointer;" onclick="closeCsvModal();openEdit('${x.expId}')">
+          <div class="csv-item-name"><span class="csv-tag tag-extra">未照合</span>${esc(x.name)}</div>
+          <div class="csv-item-detail">${x.date}　${yen(x.amount)}　<span style="color:var(--sub);">※CSV未掲載</span></div>
+        </div>`;
+    }
+  });
 
   document.getElementById('csv-result').innerHTML = summaryHtml + itemsHtml;
 }
