@@ -6698,7 +6698,12 @@ function processCsv(raw) {
   });
 
   _lastCsvAllItems = allItems;
-  _lastCsvCounts = { match:matchN, miss:missN, extra:extraN, csvN: csvItems.length, expN: exps.length };
+  const sumBy = kind => allItems.filter(x => x.kind === kind).reduce((s,x) => s + (x.amount||0), 0);
+  _lastCsvCounts = {
+    match:matchN, miss:missN, extra:extraN,
+    matchSum: sumBy('match'), missSum: sumBy('miss'), extraSum: sumBy('extra'),
+    csvN: csvItems.length, expN: exps.length
+  };
   _csvFilter = 'all';
   renderCsvResult();
 }
@@ -6711,18 +6716,19 @@ function setCsvFilter(f) {
 function renderCsvResult() {
   const c = _lastCsvCounts;
   const items = _lastCsvAllItems;
-  const tile = (filter, n, label, color) => {
+  const tile = (filter, n, sum, label, color) => {
     const active = _csvFilter === filter;
     return `<div class="csv-tile${active?' active':''}" style="background:${color}1A;color:${color};" onclick="setCsvFilter('${filter}')">
-      <div style="font-size:22px;font-weight:700;">${n}</div>
-      <div style="font-size:11px;color:var(--sub);">${label}</div>
+      <div style="font-size:20px;font-weight:700;line-height:1.1;">${n}<span style="font-size:11px;font-weight:500;opacity:0.8;"> 件</span></div>
+      <div style="font-size:13px;font-weight:600;margin-top:2px;">${yen(sum)}</div>
+      <div style="font-size:11px;color:var(--sub);margin-top:2px;">${label}</div>
     </div>`;
   };
   const summaryHtml = `
     <div style="display:flex;gap:8px;margin-bottom:12px;">
-      ${tile('match', c.match, '一致', '#34c759')}
-      ${tile('miss',  c.miss,  '未入力',  '#ff3b30')}
-      ${tile('extra', c.extra, '未照合',  '#ff9f0a')}
+      ${tile('match', c.match, c.matchSum, '一致', '#34c759')}
+      ${tile('miss',  c.miss,  c.missSum,  '未入力', '#ff3b30')}
+      ${tile('extra', c.extra, c.extraSum, '未照合', '#ff9f0a')}
     </div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">CSV: ${c.csvN}件 / 手入力(CC): ${c.expN}件${_csvFilter!=='all'?'　<span style="color:var(--primary);cursor:pointer;" onclick="setCsvFilter(\''+_csvFilter+'\')">［フィルター解除］</span>':''}</div>
     <button onclick="downloadCsvResult()" style="width:100%;padding:10px;margin-bottom:12px;background:var(--fill);border:none;border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">
