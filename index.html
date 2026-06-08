@@ -6150,7 +6150,13 @@ function toggleNm() {
   document.getElementById('nm-arrow').classList.toggle('open');
 }
 
+let _submitLockUntil = 0;
 function submitExpense() {
+  // 連打・二重送信防止（800ms以内の再呼び出しは無視）
+  const now = Date.now();
+  if (now < _submitLockUntil) { console.warn('submitExpense: double-submit ignored'); return; }
+  _submitLockUntil = now + 800;
+
   const date = document.getElementById('f-date').value;
   const name = document.getElementById('f-name').value.trim();
   const amount = parseFloat(document.getElementById('f-amount').value)||0;
@@ -6170,8 +6176,27 @@ function submitExpense() {
     auto: false
   };
   if (editId) {
-    const idx = md.expenses.findIndex(e => e.id === editId);
-    if (idx !== -1) md.expenses[idx] = { ...md.expenses[idx], ...expObj };
+    // 編集モード：editId は curMonth・mk・他月いずれにも属しうるので全月から検索
+    let foundMd = md, foundIdx = md.expenses.findIndex(e => e.id === editId);
+    if (foundIdx === -1) {
+      for (const k of Object.keys(D.months)) {
+        const candIdx = (D.months[k].expenses||[]).findIndex(e => e.id === editId);
+        if (candIdx !== -1) { foundMd = D.months[k]; foundIdx = candIdx; break; }
+      }
+    }
+    if (foundIdx === -1) {
+      alert('編集対象の支出が見つかりませんでした。重複登録を避けるため処理を中止しました。');
+      return;
+    }
+    const oldEntry = foundMd.expenses[foundIdx];
+    const newEntry = { ...oldEntry, ...expObj };
+    // 月をまたぐ編集：旧月から削除し、新月に追加
+    if (foundMd !== md) {
+      foundMd.expenses.splice(foundIdx, 1);
+      md.expenses.push(newEntry);
+    } else {
+      md.expenses[foundIdx] = newEntry;
+    }
   } else {
     md.expenses.push({ id: uid(), ...expObj });
   }
