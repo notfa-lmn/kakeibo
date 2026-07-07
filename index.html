@@ -1413,7 +1413,7 @@
       <div class="fg">
         <label>振込金額（円）</label>
         <input class="fi" type="number" id="rec-transfer-amt" placeholder="0">
-        <div class="set-note">CC対象外の場合に楽天銀行残高（理論値）へ加算</div>
+        <div class="set-note">楽天銀行残高（理論値）へ加算</div>
       </div>
       <button class="btn btn-p" onclick="saveRec()">保存する</button>
       <button class="btn btn-d" id="rec-del-btn" style="display:none;" onclick="deleteRec()">削除する</button>
@@ -1557,7 +1557,7 @@
       <div class="fg">
         <label>振込金額（円）</label>
         <input class="fi" type="number" id="rec3-transfer-amt" placeholder="0">
-        <div class="set-note">CC対象外の場合に楽天銀行残高（理論値）へ加算</div>
+        <div class="set-note">楽天銀行残高（理論値）へ加算</div>
       </div>
       <button class="btn btn-p" onclick="saveRecTeki3()">保存する</button>
       <button class="btn btn-d" id="rec3-del-btn" style="display:none;" onclick="deleteRecTeki3()">削除する</button>
@@ -2571,7 +2571,8 @@ function companyBalance(mk) {
 function bankBalance(mk) {
   const md = mdata(mk);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
-  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e) => s + (e.transferAmt||0), 0);
+  // CC・非CC問わず「振込金額」入力ぶんは楽天銀行残高に加算
+  const transferSum = (md.expenses||[]).reduce((s,e) => s + (e.transferAmt||0), 0);
   const prevCredit = md.prevCredit || 0;
   // 会社売上は累計残高（前月繰越＋当月純増）を反映
   const companyBal = companyBalance(mk);
@@ -4640,7 +4641,7 @@ function closeDetailModal() {
 function openBankDetail() {
   const md = mdata(curMonth);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
-  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
+  const transferSum = (md.expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
   const companyBal = companyBalance(curMonth);
   const total = budgetSum + transferSum + prevCredit + companyBal;
@@ -4655,14 +4656,15 @@ function openBankDetail() {
       </div>`;
   });
 
-  // 銀行振込の内訳（CC対象外の支出）
-  const noCcExpenses = (md.expenses||[]).filter(e => e.noCc && e.transferAmt > 0)
+  // 銀行振込の内訳（振込金額入力がある全ての支出：CC/CC対象外問わず）
+  const transferExpenses = (md.expenses||[]).filter(e => (e.transferAmt||0) > 0)
     .sort((a,b) => a.date.localeCompare(b.date));
   let transferRows = '';
-  noCcExpenses.forEach(e => {
+  transferExpenses.forEach(e => {
+    const ccBadge = e.noCc ? '' : ' <span style="font-size:9px;background:rgba(0,122,255,0.15);color:var(--primary);padding:0 4px;border-radius:3px;">CC</span>';
     transferRows += `
       <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:3px 0;">
-        <span style="padding-left:12px;">└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>${yen(e.transferAmt||0)}</span>
+        <span style="padding-left:12px;">└ ${esc(e.date.slice(5))} ${esc(e.name)}${ccBadge}</span><span>${yen(e.transferAmt||0)}</span>
       </div>`;
   });
 
@@ -4676,7 +4678,7 @@ function openBankDetail() {
       ${row('予算残高合計', budgetSum)}
       ${catRows}
       <div style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:6px;"></div>
-      ${row('銀行振込合計（CC対象外）', transferSum)}
+      ${row('銀行振込合計', transferSum)}
       ${transferRows}
       <div style="border-top:0.5px solid var(--sep);margin-top:6px;padding-top:6px;"></div>
       ${row('前月クレジット支払額', prevCredit)}
@@ -4849,7 +4851,7 @@ function openBudgetDetail(cat) {
 function refreshBankDisplay() {
   const md = mdata(curMonth);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
-  const transferSum = (md.expenses||[]).filter(e => e.noCc).reduce((s,e)=>s+(e.transferAmt||0),0);
+  const transferSum = (md.expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
   const prevCredit = md.prevCredit || 0;
   const companyBal = companyBalance(curMonth);
   const total = budgetSum + transferSum + prevCredit + companyBal;
