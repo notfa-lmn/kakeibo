@@ -1202,22 +1202,10 @@
       <div class="set-note">※前月に次月分の予算を使った場合などの調整額（マイナス入力でOK）<br>※前月の「次月振込予定」は自動反映されます</div>
     </div>
 
-    <!-- Recurring Income -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecIncList()" id="rec-inc-toggle-btn">
-        <span>定期収入 自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-inc-toggle-arrow">▶</span>
-      </button>
-      <button onclick="openRecIncModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
-    </div>
-    <div class="rec-list-wrap" id="rec-inc-list-wrap">
-      <div id="rec-inc-list"></div>
-    </div>
-
-    <!-- Recurring 敵１ -->
+    <!-- Recurring expenses -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
-        <span id="rec-toggle-label">定期支出（敵１）自動入力</span>
+        <span id="rec-toggle-label">定期支出自動入力</span>
         <span class="rec-toggle-arrow" id="rec-toggle-arrow">▶</span>
       </button>
       <button onclick="openRecModal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
@@ -1225,58 +1213,6 @@
     <div class="rec-list-wrap" id="rec-list-wrap">
       <div id="rec-list"></div>
     </div>
-
-    <!-- Recurring 敵３ -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecTeki3List()" id="rec-teki3-toggle-btn">
-        <span>定期支出（敵３）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-teki3-toggle-arrow">▶</span>
-      </button>
-      <button onclick="openRecTeki3Modal(null)" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
-    </div>
-    <div class="rec-list-wrap" id="rec-teki3-list-wrap">
-      <div id="rec-teki3-list"></div>
-    </div>
-
-    <!-- Recurring Anl 月次 -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecAnlMonthlyList()" id="rec-anl-monthly-toggle-btn">
-        <span>定期分析（月次）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-anl-monthly-toggle-arrow">▶</span>
-      </button>
-      <button onclick="openRecAnlModal(null,'monthly')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
-    </div>
-    <div class="rec-list-wrap" id="rec-anl-monthly-list-wrap">
-      <div id="rec-anl-monthly-list"></div>
-    </div>
-
-    <!-- Recurring Anl 不定期 -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleRecAnlIntervalList()" id="rec-anl-interval-toggle-btn">
-        <span>定期分析（不定期）自動入力</span>
-        <span class="rec-toggle-arrow" id="rec-anl-interval-toggle-arrow">▶</span>
-      </button>
-      <button onclick="openRecAnlModal(null,'interval')" style="background:none;border:none;color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;padding:0;">＋ 追加</button>
-    </div>
-    <div class="rec-list-wrap" id="rec-anl-interval-list-wrap">
-      <div id="rec-anl-interval-list"></div>
-    </div>
-
-    <!-- MF Category Mapping -->
-    <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
-      <button class="rec-toggle-btn" onclick="toggleMfCatMapSection()" id="mf-cat-map-toggle-btn">
-        <span>MFカテゴリ → 敵マッピング設定</span>
-        <span class="rec-toggle-arrow" id="mf-cat-map-toggle-arrow">▶</span>
-      </button>
-    </div>
-    <div id="mf-cat-map-wrap" style="overflow:hidden;max-height:0;transition:max-height 0.3s ease;">
-      <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">MFの大項目を各敵に割り当てます。「（除外）」にするとKPIの集計から除外されます。「（未設定）」はデフォルト設定が使われます。</div>
-      <div id="mf-cat-map-settings"></div>
-    </div>
-
-    <!-- Category management -->
-    <div class="section-title" style="padding-left:0;">支出カテゴリの管理</div>
-    <div id="cat-mgr"></div>
 
     <!-- Account info -->
     <div class="section-title" style="padding-left:0;">アカウント・同期状態</div>
@@ -1376,8 +1312,7 @@
         <label>グループ</label>
         <select class="fs" id="rec-group">
           <option value="">未分類</option>
-          <option value="個人支払（支出）">個人支払（支出）</option>
-          <option value="個人支払（投資）">個人支払（投資）</option>
+          <option value="個人支払">個人支払</option>
           <option value="個人支払（社保）">個人支払（社保）</option>
           <option value="事業支払">事業支払</option>
           <option value="会社支払">会社支払</option>
@@ -1520,8 +1455,7 @@
         <label>グループ</label>
         <select class="fs" id="rec3-group">
           <option value="">未分類</option>
-          <option value="個人支払（支出）">個人支払（支出）</option>
-          <option value="個人支払（投資）">個人支払（投資）</option>
+          <option value="個人支払">個人支払</option>
           <option value="個人支払（社保）">個人支払（社保）</option>
           <option value="事業支払">事業支払</option>
           <option value="会社支払">会社支払</option>
@@ -1661,8 +1595,7 @@
         <label>グループ（支出のみ）</label>
         <select class="fs" id="ra-group">
           <option value="">未分類</option>
-          <option value="個人支払（支出）">個人支払（支出）</option>
-          <option value="個人支払（投資）">個人支払（投資）</option>
+          <option value="個人支払">個人支払</option>
           <option value="個人支払（社保）">個人支払（社保）</option>
           <option value="事業支払">事業支払</option>
           <option value="会社支払">会社支払</option>
@@ -2392,6 +2325,21 @@ function defaultData() {
   };
 }
 
+// 旧「個人支払（支出）」「個人支払（投資）」を「個人支払」へ統合するマイグレーション
+function migratePaymentGroups() {
+  let changed = false;
+  const OLD = new Set(['個人支払（支出）', '個人支払（投資）']);
+  const migrate = list => {
+    (list || []).forEach(r => {
+      if (r && OLD.has(r.group)) { r.group = '個人支払'; changed = true; }
+    });
+  };
+  migrate(D.settings?.recurring);
+  migrate(D.settings?.recurringTeki3);
+  migrate(D.settings?.recurringAnl);
+  if (changed) save();
+}
+
 function initExpenseCats() {
   if (!D.settings.expenseCats) {
     D.settings.expenseCats = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
@@ -2675,7 +2623,7 @@ function generateRecurringIncome(mk) {
 // ═══════════════════════════════════════════════════
 //  CATEGORY MANAGER
 // ═══════════════════════════════════════════════════
-const REC_GROUPS = ['個人支払（支出）','個人支払（投資）','個人支払（社保）','事業支払','会社支払'];
+const REC_GROUPS = ['個人支払','個人支払（社保）','事業支払','会社支払'];
 const REC_GROUP_NONE = 'その他';
 
 const TEKI_LABELS = {
@@ -5089,16 +5037,6 @@ function renderSettings() {
     </div>`).join('');
   // recurring expense
   renderRecList();
-  // recurring teki3
-  renderRecTeki3List();
-  // recurring income
-  renderRecIncList();
-  // recurring anl
-  renderRecAnlList();
-  // category manager
-  renderCatMgr();
-  // MFカテゴリマッピング
-  renderMfCatMapSettings();
 }
 
 function savePrevCredit(val) {
@@ -6881,6 +6819,7 @@ document.getElementById('rec-anl-modal').addEventListener('click', e => {
 // ═══════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════
+migratePaymentGroups();
 initExpenseCats();
 generateRecurring(curMonth);
 generateRecurringTeki3(curMonth);
