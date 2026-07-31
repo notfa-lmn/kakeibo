@@ -4584,7 +4584,7 @@ function renderSummary() {
     const pct = effectiveBudget > 0 ? Math.max(0, Math.min(100, bal/effectiveBudget*100)) : 0;
     const cls = bal < 0 ? 'bad' : bal < effectiveBudget*0.2 ? 'warn' : 'ok';
     const bcls = bal < 0 ? 'bar-bad' : bal < effectiveBudget*0.2 ? 'bar-warn' : 'bar-ok';
-    const adjLabel = (!isCarryover && totalAdj !== 0) ? ` (調整${totalAdj>0?'+':''}${yen(totalAdj)})` : '';
+    const adjLabel = (!isCarryover && totalAdj !== 0) ? ` (調整${totalAdj>0?'+':''}${yenSigned(totalAdj)})` : '';
     let detailText;
     if (isCarryover) {
       const prevBal = D.months[sumPrevKey] ? displayBudgetBalance(sumPrevKey, cat) : 0;
@@ -4762,7 +4762,7 @@ function openBudgetDetail(cat) {
 
   const effectiveBudget = isCarryover ? budgetBalance(curMonth, cat) : base + totalAdj;
   const adjStr = (!isCarryover && totalAdj !== 0)
-    ? `　<span style="font-size:12px;color:${totalAdj>0?'var(--success)':'var(--danger)'};">（当月調整 ${totalAdj>0?'+':''}${yen(totalAdj)}）</span>`
+    ? `　<span style="font-size:12px;color:${totalAdj>0?'var(--success)':'var(--danger)'};">（当月調整 ${totalAdj>0?'+':''}${yenSigned(totalAdj)}）</span>`
     : '';
   let html = `<div class="detail-block">
     <div class="detail-block-title">予算</div>
