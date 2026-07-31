@@ -2325,6 +2325,29 @@ function defaultData() {
   };
 }
 
+// 旧仕様では applyNmAdj が md.adj[NM_ADJ_CATS] を上書きしていたため
+// 現在保存されている値は「自動計算値」の可能性が高い。nmAdj に移して adj を0クリアする。
+// _nmAdjMigrated フラグで各月1回のみ実行。
+function migrateNmAdj() {
+  if (!D.months) return;
+  let changed = false;
+  Object.values(D.months).forEach(md => {
+    if (!md || md._nmAdjMigrated) return;
+    if (!md.nmAdj) md.nmAdj = {};
+    if (!md.adj) md.adj = {};
+    NM_ADJ_CATS.forEach(cat => {
+      const v = md.adj[cat] || 0;
+      if (v !== 0) {
+        md.nmAdj[cat] = v;
+        md.adj[cat] = 0;
+      }
+    });
+    md._nmAdjMigrated = true;
+    changed = true;
+  });
+  if (changed) save();
+}
+
 // 旧「個人支払（支出）」「個人支払（投資）」を「個人支払」へ統合するマイグレーション
 function migratePaymentGroups() {
   let changed = false;
@@ -2381,8 +2404,9 @@ async function saveAndWait() {
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, nmAdj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
   if (!D.months[key].adj) D.months[key].adj = {};
+  if (!D.months[key].nmAdj) D.months[key].nmAdj = {};
   if (!D.months[key].incomes) D.months[key].incomes = [];
   if (!D.months[key].withdrawals) D.months[key].withdrawals = [];
   if (!D.months[key].anlEntries) D.months[key].anlEntries = [];
@@ -2447,8 +2471,9 @@ function budgetBalance(mk, cat) {
   const md = mdata(mk);
   const base = D.settings.budgets[cat] || 0;
   const manAdj = (md.adj[cat] || 0);
+  const autoNmAdj = (md.nmAdj && md.nmAdj[cat]) || 0;
   const prevKey = prevMk(mk);
-  let total = base + manAdj;
+  let total = base + manAdj + autoNmAdj;
   // 積立予算：前月の「残高（支出控除後）」を繰り越す
   if (CARRYOVER_CATS.has(cat) && D.months[prevKey]) {
     total += displayBudgetBalance(prevKey, cat);
@@ -2470,12 +2495,13 @@ function displayBudgetBalance(mk, cat) {
 // ── 前月の次月振込予定 → 当月のadjにマイナス自動反映 ──
 const NM_ADJ_CATS = new Set(['食料品', 'お小遣い', '日用品']);
 
-// 前月の「次月振込予定」をもとに当月のadj（予算調整）をリアルタイム再計算する
+// 前月の「次月振込予定」をもとに当月の nmAdj（自動計算調整値）をリアルタイム再計算する
 // ※常に再計算（フラグなし）。支出save前に呼ぶことでcloud保存にも含まれる
+// ※ユーザーの手動調整値（md.adj）は上書きしない。自動値は別領域（md.nmAdj）に格納
 function applyNmAdj(mk) {
   const prevKey = prevMk(mk);
   const md = mdata(mk);
-  if (!md.adj) md.adj = {};
+  if (!md.nmAdj) md.nmAdj = {};
   // 前月の次月振込予定を種別ごとに合計
   const nmSums = {};
   if (D.months[prevKey]) {
@@ -2488,7 +2514,7 @@ function applyNmAdj(mk) {
   }
   // NM_ADJ_CATSの各カテゴリをマイナス値で上書き（nmAmtなければ0にリセット）
   NM_ADJ_CATS.forEach(cat => {
-    md.adj[cat] = nmSums[cat] ? -(nmSums[cat]) : 0;
+    md.nmAdj[cat] = nmSums[cat] ? -(nmSums[cat]) : 0;
   });
 }
 
@@ -4549,18 +4575,20 @@ function renderSummary() {
   const sumPrevKey = prevMk(curMonth);
   SUMMARY_TILE_CATS.forEach(cat => {
     const base = D.settings.budgets[cat]||0;
-    const adj  = (md.adj||{})[cat]||0;
+    const adj    = (md.adj  ||{})[cat]||0;
+    const nmAdj  = (md.nmAdj||{})[cat]||0;
+    const totalAdj = adj + nmAdj;
     const bal = displayBudgetBalance(curMonth, cat);
     const isCarryover = CARRYOVER_CATS.has(cat);
-    const effectiveBudget = isCarryover ? budgetBalance(curMonth, cat) : base + adj;
+    const effectiveBudget = isCarryover ? budgetBalance(curMonth, cat) : base + totalAdj;
     const pct = effectiveBudget > 0 ? Math.max(0, Math.min(100, bal/effectiveBudget*100)) : 0;
     const cls = bal < 0 ? 'bad' : bal < effectiveBudget*0.2 ? 'warn' : 'ok';
     const bcls = bal < 0 ? 'bar-bad' : bal < effectiveBudget*0.2 ? 'bar-warn' : 'bar-ok';
-    const adjLabel = (!isCarryover && adj !== 0) ? ` (調整${adj>0?'+':''}${yen(adj)})` : '';
+    const adjLabel = (!isCarryover && totalAdj !== 0) ? ` (調整${totalAdj>0?'+':''}${yen(totalAdj)})` : '';
     let detailText;
     if (isCarryover) {
       const prevBal = D.months[sumPrevKey] ? displayBudgetBalance(sumPrevKey, cat) : 0;
-      detailText = `前月繰越: ${yen(prevBal)} ＋ 当月調整: ${yenSigned(adj)}`;
+      detailText = `前月繰越: ${yen(prevBal)} ＋ 当月調整: ${yenSigned(totalAdj)}`;
     } else {
       detailText = `予算: ${yen(effectiveBudget)}${adjLabel}`;
     }
@@ -4723,16 +4751,18 @@ function openIncomeDetail() {
 function openBudgetDetail(cat) {
   const md = mdata(curMonth);
   const base = D.settings.budgets[cat] || 0;
-  const adj  = (md.adj || {})[cat] || 0;
+  const adj    = (md.adj   || {})[cat] || 0;
+  const nmAdj  = (md.nmAdj || {})[cat] || 0;
+  const totalAdj = adj + nmAdj;
   const bal  = displayBudgetBalance(curMonth, cat);
   const isCarryover = CARRYOVER_CATS.has(cat);
   const expenses = (md.expenses || [])
     .filter(e => e.payType === cat)
     .sort((a,b) => a.date.localeCompare(b.date));
 
-  const effectiveBudget = isCarryover ? budgetBalance(curMonth, cat) : base + adj;
-  const adjStr = (!isCarryover && adj !== 0)
-    ? `　<span style="font-size:12px;color:${adj>0?'var(--success)':'var(--danger)'};">（当月調整 ${adj>0?'+':''}${yen(adj)}）</span>`
+  const effectiveBudget = isCarryover ? budgetBalance(curMonth, cat) : base + totalAdj;
+  const adjStr = (!isCarryover && totalAdj !== 0)
+    ? `　<span style="font-size:12px;color:${totalAdj>0?'var(--success)':'var(--danger)'};">（当月調整 ${totalAdj>0?'+':''}${yen(totalAdj)}）</span>`
     : '';
   let html = `<div class="detail-block">
     <div class="detail-block-title">予算</div>
@@ -6820,6 +6850,7 @@ document.getElementById('rec-anl-modal').addEventListener('click', e => {
 //  INIT
 // ═══════════════════════════════════════════════════
 migratePaymentGroups();
+migrateNmAdj();
 initExpenseCats();
 generateRecurring(curMonth);
 generateRecurringTeki3(curMonth);
