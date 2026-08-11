@@ -1232,25 +1232,6 @@
       <div class="set-note">※前月に次月分の予算を使った場合などの調整額（マイナス入力でOK）<br>※前月の「次月振込予定」は自動反映されます</div>
     </div>
 
-    <!-- Breakdown items management -->
-    <div class="section-title" style="padding-left:0;">特別費 内訳項目</div>
-    <div class="set-card">
-      <div id="breakdown-list-特別費" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
-      <div style="display:flex;gap:6px;padding:6px 4px;">
-        <input class="fi" type="text" id="breakdown-new-特別費" placeholder="例：国内旅行" style="flex:1;">
-        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('特別費')">追加</button>
-      </div>
-    </div>
-
-    <div class="section-title" style="padding-left:0;">敵３ 内訳項目</div>
-    <div class="set-card">
-      <div id="breakdown-list-敵３" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
-      <div style="display:flex;gap:6px;padding:6px 4px;">
-        <input class="fi" type="text" id="breakdown-new-敵３" placeholder="例：家電購入" style="flex:1;">
-        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('敵３')">追加</button>
-      </div>
-    </div>
-
     <!-- Recurring expenses -->
     <div class="section-title" style="padding-left:0; display:flex; justify-content:space-between; align-items:center;">
       <button class="rec-toggle-btn" onclick="toggleRecList()" id="rec-toggle-btn">
@@ -2383,16 +2364,18 @@ function defaultData() {
 }
 
 // D.settings.breakdowns の初期化（既存データ用）
-// v1: 文字列配列 → v2: オブジェクト配列 {name, monthlyAlloc, seed, startMonth}
+// v3: バケツは {name} のみ。当月調整は md.bucketAdj[cat][bdName] で管理
 function initBreakdowns() {
   if (!D.settings.breakdowns) D.settings.breakdowns = {};
   let migrated = false;
   BREAKDOWN_CATS.forEach(cat => {
     if (!Array.isArray(D.settings.breakdowns[cat])) D.settings.breakdowns[cat] = [];
     D.settings.breakdowns[cat] = D.settings.breakdowns[cat].map(item => {
-      if (typeof item === 'string') {
+      if (typeof item === 'string') { migrated = true; return { name: item }; }
+      if (item.monthlyAlloc !== undefined || item.seed !== undefined || item.startMonth !== undefined) {
+        // 旧仕様 (v2) の設定情報を破棄（今後は md.bucketAdj で管理）
         migrated = true;
-        return { name: item, monthlyAlloc: 0, seed: 0, startMonth: '' };
+        return { name: item.name };
       }
       return item;
     });
@@ -2479,9 +2462,10 @@ async function saveAndWait() {
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, nmAdj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, nmAdj:{}, bucketAdj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
   if (!D.months[key].adj) D.months[key].adj = {};
   if (!D.months[key].nmAdj) D.months[key].nmAdj = {};
+  if (!D.months[key].bucketAdj) D.months[key].bucketAdj = {};
   if (!D.months[key].incomes) D.months[key].incomes = [];
   if (!D.months[key].withdrawals) D.months[key].withdrawals = [];
   if (!D.months[key].anlEntries) D.months[key].anlEntries = [];
@@ -2545,7 +2529,10 @@ function withdrawalSum(mk, cat) {
 function budgetBalance(mk, cat) {
   const md = mdata(mk);
   const base = D.settings.budgets[cat] || 0;
-  const manAdj = (md.adj[cat] || 0);
+  // BREAKDOWN_CATS の親カテゴリ調整は各バケツ調整の合計を使用
+  const manAdj = BREAKDOWN_CATS.includes(cat)
+    ? sumBucketAdj(mk, cat)
+    : (md.adj[cat] || 0);
   const autoNmAdj = (md.nmAdj && md.nmAdj[cat]) || 0;
   const prevKey = prevMk(mk);
   let total = base + manAdj + autoNmAdj;
@@ -3354,173 +3341,43 @@ function deleteWithdrawal() {
 }
 
 // ═══════════════════════════════════════════════════
-//  BREAKDOWN（特別費・敵３ の内訳項目管理と集計）
+//  BREAKDOWN（特別費・敵３ の内訳バケツ管理）
 // ═══════════════════════════════════════════════════
+//  データ構造:
+//    D.settings.breakdowns[cat] = [{ name }, ...]
+//    md.bucketAdj[cat][bdName] = 当月調整額（数値）
+//  各バケツ残高（当月）: 前月バケツ残高 + 当月バケツ調整 − 当月バケツ支出
+//  親カテゴリ調整: sum(md.bucketAdj[cat][*]) （自動）
 
-// 内訳項目の一覧を取得（オブジェクト配列）
+// 内訳項目の一覧
 function getBreakdownItems(cat) {
   const list = (D.settings.breakdowns && D.settings.breakdowns[cat]) || [];
-  return list.map(x => typeof x === 'string'
-    ? { name: x, monthlyAlloc: 0, seed: 0, startMonth: '' }
-    : x
-  );
+  return list.map(x => typeof x === 'string' ? { name: x } : { name: x.name });
 }
 function getBreakdownItem(cat, name) {
   return getBreakdownItems(cat).find(x => x.name === name);
 }
-function getBreakdownNames(cat) {
-  return getBreakdownItems(cat).map(x => x.name);
-}
 
-// 内訳項目の1フィールドを更新
-function saveBreakdownField(cat, name, field, value) {
-  initBreakdowns();
-  const list = D.settings.breakdowns[cat];
-  const idx = list.findIndex(x => (typeof x === 'string' ? x : x.name) === name);
-  if (idx === -1) return;
-  if (typeof list[idx] === 'string') {
-    list[idx] = { name: list[idx], monthlyAlloc: 0, seed: 0, startMonth: '' };
-  }
-  list[idx][field] = value;
+// バケツ毎の当月調整額
+function getBucketAdj(mk, cat, bdName) {
+  const md = mdata(mk);
+  return (md.bucketAdj && md.bucketAdj[cat] && md.bucketAdj[cat][bdName]) || 0;
+}
+function setBucketAdj(mk, cat, bdName, val) {
+  const md = mdata(mk);
+  if (!md.bucketAdj) md.bucketAdj = {};
+  if (!md.bucketAdj[cat]) md.bucketAdj[cat] = {};
+  md.bucketAdj[cat][bdName] = val;
   save();
-  // 依存する画面を再描画（可能な範囲）
-  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+}
+// カテゴリの当月調整合計（親カテゴリ調整の自動値）
+function sumBucketAdj(mk, cat) {
+  const md = mdata(mk);
+  const catAdj = md.bucketAdj && md.bucketAdj[cat] ? md.bucketAdj[cat] : {};
+  return Object.values(catAdj).reduce((s, v) => s + (v || 0), 0);
 }
 
-function addBreakdownItem(cat, inputId) {
-  initBreakdowns();
-  const input = document.getElementById(inputId || `breakdown-new-${cat}`);
-  if (!input) return;
-  const name = (input.value || '').trim();
-  if (!name) return;
-  const list = D.settings.breakdowns[cat];
-  if (list.some(x => (typeof x === 'string' ? x : x.name) === name)) {
-    alert('同名の内訳項目が既にあります'); return;
-  }
-  list.push({ name, monthlyAlloc: 0, seed: 0, startMonth: curMonth });
-  save();
-  input.value = '';
-  // 呼び出し元に応じた再描画
-  renderBreakdownSettings(cat);
-  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
-}
-
-function deleteBreakdownItemAndRefresh(cat, name) {
-  deleteBreakdownItem(cat, name);
-  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
-}
-
-function deleteBreakdownItem(cat, name) {
-  initBreakdowns();
-  let usedCount = 0;
-  Object.values(D.months || {}).forEach(m => {
-    (m.expenses || []).forEach(e => {
-      if (e.payType === cat && e.breakdown === name) usedCount++;
-    });
-  });
-  const msg = usedCount > 0
-    ? `「${name}」は ${usedCount} 件の支出で使用されています。削除しても既存の支出は残り、内訳は「未分類」扱いになります。削除しますか？`
-    : `「${name}」を削除しますか？`;
-  if (!confirm(msg)) return;
-  D.settings.breakdowns[cat] = D.settings.breakdowns[cat].filter(x =>
-    (typeof x === 'string' ? x : x.name) !== name
-  );
-  save();
-  renderBreakdownSettings(cat);
-}
-
-function renderBreakdownSettings(cat) {
-  const items = getBreakdownItems(cat);
-  const el = document.getElementById(`breakdown-list-${cat}`);
-  if (!el) return;
-  // 縦並びカード表示に切替
-  el.style.flexWrap = 'nowrap';
-  el.style.flexDirection = 'column';
-  el.style.gap = '8px';
-  if (!items.length) {
-    el.innerHTML = `<div style="color:var(--sub);font-size:13px;padding:4px 6px;">まだ項目がありません</div>`;
-    return;
-  }
-  const esQ = s => esc(s).replace(/'/g, "&#39;");
-  el.innerHTML = items.map(it => {
-    const nameEs = esQ(it.name);
-    return `
-    <div style="background:var(--fill);border-radius:10px;padding:10px 12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <span style="font-weight:600;font-size:14px;">${esc(it.name)}</span>
-        <button onclick="deleteBreakdownItem('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;">削除</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;font-size:11px;color:var(--sub);">
-        <div>
-          <div>月次積立額</div>
-          <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.monthlyAlloc||0)}"
-            onfocus="unfmtInput(this)"
-            onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','monthlyAlloc',parseYen(this.value))"
-            style="width:100%;font-size:13px;padding:6px 8px;">
-        </div>
-        <div>
-          <div>開始残高（初期プール）</div>
-          <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.seed||0)}"
-            onfocus="unfmtInput(this)"
-            onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','seed',parseYen(this.value))"
-            style="width:100%;font-size:13px;padding:6px 8px;">
-        </div>
-        <div style="grid-column:1/-1;">
-          <div>開始月（この月から積立・残高が有効）</div>
-          <input class="fi" type="month" value="${esc(it.startMonth||'')}"
-            onchange="saveBreakdownField('${cat}','${nameEs}','startMonth',this.value)"
-            style="width:100%;font-size:13px;padding:6px 8px;">
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// 月キーの引き算（結果は月数）
-function monthsBetween(mkA, mkB) {
-  if (!mkA || !mkB) return 0;
-  const [ya, ma] = mkA.split('-').map(Number);
-  const [yb, mb] = mkB.split('-').map(Number);
-  return (yb - ya) * 12 + (mb - ma);
-}
-
-// カテゴリ×内訳の累計支出（startMk～uptoMk）
-function totalSpendForBreakdown(cat, bdName, uptoMk, fromMk) {
-  let total = 0;
-  Object.keys(D.months || {}).forEach(mk => {
-    if (uptoMk && mk > uptoMk) return;
-    if (fromMk && mk < fromMk) return;
-    (D.months[mk].expenses || []).forEach(e => {
-      if (e.payType === cat && (e.breakdown || '') === bdName) {
-        total += e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
-      }
-    });
-  });
-  return total;
-}
-
-// 内訳バケツの累計残高（startMonth ≤ mk）
-function breakdownBalance(mk, cat, bdName) {
-  const bd = getBreakdownItem(cat, bdName);
-  if (!bd) return -totalSpendForBreakdown(cat, bdName, mk);
-  const startMk = bd.startMonth || '';
-  if (startMk && mk < startMk) return 0;
-  const nMonths = startMk ? monthsBetween(startMk, mk) + 1 : 1;
-  const budget = (bd.seed||0) + (bd.monthlyAlloc||0) * nMonths;
-  const spend = totalSpendForBreakdown(cat, bdName, mk, startMk);
-  return budget - spend;
-}
-
-// 未分類（内訳なし）の残高 = 親カテゴリ残高 − バケツ合計残高
-// これによりバケツ合計 + 未分類 = 親カテゴリ残高が常に成立する
-function unallocatedBreakdownBalance(mk, cat) {
-  const parentBal = displayBudgetBalance(mk, cat);
-  const bucketsTotal = getBreakdownItems(cat)
-    .reduce((s, it) => s + breakdownBalance(mk, cat, it.name), 0);
-  return parentBal - bucketsTotal;
-}
-
-// 当月の支出（バケツ内訳の累計ではなく、mk月内のみ）
+// バケツの当月支出合計
 function currentMonthSpendForBreakdown(mk, cat, bdName) {
   const md = mdata(mk);
   let total = 0;
@@ -3532,41 +3389,73 @@ function currentMonthSpendForBreakdown(mk, cat, bdName) {
   return total;
 }
 
-// カテゴリ×月の支出を内訳ごとに集計（累計残高・当月支出・当月支出明細を含む）
-function aggregateBreakdown(mk, cat) {
-  const md = mdata(mk);
-  const items = getBreakdownItems(cat);
-  const buckets = {};
-  items.forEach(it => {
-    buckets[it.name] = {
-      name: it.name,
-      monthlyAlloc: it.monthlyAlloc || 0,
-      seed: it.seed || 0,
-      startMonth: it.startMonth || '',
-      balance: breakdownBalance(mk, cat, it.name),
-      monthSpend: 0,
-      expenses: []
-    };
-  });
-  const uncat = {
-    name: '未分類',
-    monthlyAlloc: 0, seed: 0, startMonth: '',
-    balance: unallocatedBreakdownBalance(mk, cat),
-    monthSpend: 0,
-    expenses: []
-  };
-  (md.expenses || []).filter(e => e.payType === cat).forEach(e => {
-    const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
-    const bd = e.breakdown && buckets[e.breakdown] ? buckets[e.breakdown] : uncat;
-    bd.monthSpend += alloc;
-    bd.expenses.push(e);
-  });
-  const list = items.map(it => buckets[it.name]);
-  // 未分類は支出があるか累計残高が非ゼロなら表示
-  if (uncat.expenses.length || uncat.balance !== 0) list.push(uncat);
-  return list;
+// バケツ残高（当月支出控除後）= 前月バケツ残高 + 当月調整 − 当月支出
+function bucketDisplayBalance(mk, cat, bdName) {
+  const prevKey = prevMk(mk);
+  const prevDisp = D.months[prevKey] ? bucketDisplayBalance(prevKey, cat, bdName) : 0;
+  const curAdj = getBucketAdj(mk, cat, bdName);
+  const curSpend = currentMonthSpendForBreakdown(mk, cat, bdName);
+  return prevDisp + curAdj - curSpend;
 }
 
+// 未分類（内訳なし）残高 = 親カテゴリ残高 − バケツ合計残高
+function unallocatedBreakdownBalance(mk, cat) {
+  const parentBal = displayBudgetBalance(mk, cat);
+  const bucketsTotal = getBreakdownItems(cat)
+    .reduce((s, it) => s + bucketDisplayBalance(mk, cat, it.name), 0);
+  return parentBal - bucketsTotal;
+}
+
+// バケツを追加
+function addBreakdownItem(cat, inputId) {
+  initBreakdowns();
+  const input = document.getElementById(inputId || `breakdown-new-${cat}`);
+  if (!input) return;
+  const name = (input.value || '').trim();
+  if (!name) return;
+  const list = D.settings.breakdowns[cat];
+  if (list.some(x => (typeof x === 'string' ? x : x.name) === name)) {
+    alert('同名の内訳バケツが既にあります'); return;
+  }
+  list.push({ name });
+  save();
+  input.value = '';
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+  if (curScreen === 'settings') renderScreen();
+}
+
+// バケツを削除
+function deleteBreakdownItem(cat, name) {
+  initBreakdowns();
+  let usedCount = 0;
+  Object.values(D.months || {}).forEach(m => {
+    (m.expenses || []).forEach(e => {
+      if (e.payType === cat && e.breakdown === name) usedCount++;
+    });
+  });
+  const msg = usedCount > 0
+    ? `「${name}」は ${usedCount} 件の支出で使用されています。削除しても既存の支出は残り、内訳は「未分類」扱いになります。バケツを削除しますか？`
+    : `バケツ「${name}」を削除しますか？各月に登録した当月調整額も一緒に消えます。`;
+  if (!confirm(msg)) return;
+  D.settings.breakdowns[cat] = D.settings.breakdowns[cat].filter(x =>
+    (typeof x === 'string' ? x : x.name) !== name
+  );
+  // 各月の bucketAdj からも削除
+  Object.values(D.months || {}).forEach(m => {
+    if (m.bucketAdj && m.bucketAdj[cat]) delete m.bucketAdj[cat][name];
+  });
+  save();
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+  if (curScreen === 'settings') renderScreen();
+}
+
+// 設定画面「今月の予算調整」からバケツ調整額を保存
+function saveBucketAdjInput(cat, bdName, val) {
+  setBucketAdj(curMonth, cat, bdName, parseYen(val));
+  if (curScreen === 'settings') renderScreen();
+}
+
+// 特別費/敵３タブの描画（バケツ名の追加・削除と残高表示のみ）
 function renderBreakdownScreen(cat) {
   const monthLabelEl = document.getElementById(cat === '特別費' ? 'tokubetsu-month' : 'teki3-month');
   const bodyEl       = document.getElementById(cat === '特別費' ? 'tokubetsu-body'  : 'teki3-body');
@@ -3576,90 +3465,91 @@ function renderBreakdownScreen(cat) {
   const parentBal   = displayBudgetBalance(curMonth, cat);
   const parentBud   = budgetBalance(curMonth, cat);
   const parentSpent = parentBud - parentBal;
-  const items       = aggregateBreakdown(curMonth, cat);
-  const bucketsTotal = items.reduce((s, it) => s + it.balance, 0);
+  const items       = getBreakdownItems(cat);
+  const md          = mdata(curMonth);
 
+  // 親カテゴリのサマリー
   let html = `
     <div class="card" style="margin:12px 0 16px;">
       <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--sub);padding:2px 0;">
-        <span>今月の予算（親カテゴリ・繰越含む）</span><span>${yen(parentBud)}</span>
+        <span>今月の予算（繰越+調整）</span><span>${yen(parentBud)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--danger);padding:2px 0;">
         <span>今月の支出</span><span>-${yen(parentSpent)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;border-top:0.5px solid var(--sep);margin-top:6px;padding-top:8px;font-size:15px;font-weight:700;">
-        <span>親カテゴリ残高</span><span style="color:${parentBal<0?'var(--danger)':'var(--text)'};">${yenSigned(parentBal)}</span>
+        <span>${cat} 残高</span><span style="color:${parentBal<0?'var(--danger)':'var(--text)'};">${yenSigned(parentBal)}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0 0;font-size:12px;color:var(--sub);">
-        <span>内訳バケツ合計残高</span><span>${yenSigned(bucketsTotal)}</span>
-      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:6px;">※ 当月調整は「設定 → 今月の予算調整」で各バケツに入力</div>
     </div>`;
 
-  // ＋ 新規バケツを追加
+  // ＋ バケツを追加（コンパクト）
   const addInputId = `bd-tab-new-${cat}`;
-  html += `<div class="section-title" style="padding-left:0;">内訳バケツ</div>
-    <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex;gap:6px;">
-        <input class="fi" type="text" id="${addInputId}" placeholder="例：国内旅行" style="flex:1;font-size:13px;padding:8px 10px;">
-        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('${cat}','${addInputId}')">＋ 追加</button>
-      </div>
-      <div style="font-size:11px;color:var(--sub);margin-top:6px;">追加後、下のカードで月次積立・開始残高・開始月を設定してください</div>
+  html += `
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <input class="fi" type="text" id="${addInputId}" placeholder="バケツ名を入力（例：国内旅行）" style="flex:1;font-size:13px;padding:8px 10px;">
+      <button onclick="addBreakdownItem('${cat}','${addInputId}')" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">追加</button>
     </div>`;
+
+  html += `<div class="section-title" style="padding-left:0;">バケツ残高</div>`;
 
   if (!items.length) {
     html += `<div class="card"><div style="text-align:center;color:var(--sub);padding:20px;font-size:13px;">
-      バケツを追加すると、ここに残高が表示されます。
+      バケツがまだありません。上の入力欄から追加してください。
     </div></div>`;
-  } else {
-    const esQ = s => esc(s).replace(/'/g, "&#39;");
-    items.forEach(it => {
-      const isUncat = it.name === '未分類';
-      const nameEs = esQ(it.name);
-      const balColor = it.balance < 0 ? 'var(--danger)' : (it.balance === 0 ? 'var(--sub)' : 'var(--text)');
-      const rows = it.expenses.sort((a,b) => a.date.localeCompare(b.date)).map(e => {
-        const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
-        return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
-          <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
-        </div>`;
-      }).join('');
-      const cfgBlock = isUncat
-        ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">内訳未設定の支出（内訳バケツを設定または既存支出を編集して振り分けてください）</div>'
-        : `<div style="font-size:11px;color:var(--sub);margin-top:6px;padding-top:6px;border-top:0.5px dashed var(--sep);">バケツ設定</div>
-           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-top:6px;">
-             <div>
-               <div style="font-size:11px;color:var(--sub);">月次積立額</div>
-               <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.monthlyAlloc||0)}"
-                 onfocus="unfmtInput(this)"
-                 onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','monthlyAlloc',parseYen(this.value))"
-                 style="width:100%;font-size:13px;padding:6px 8px;">
-             </div>
-             <div>
-               <div style="font-size:11px;color:var(--sub);">開始残高</div>
-               <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.seed||0)}"
-                 onfocus="unfmtInput(this)"
-                 onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','seed',parseYen(this.value))"
-                 style="width:100%;font-size:13px;padding:6px 8px;">
-             </div>
-             <div style="grid-column:1/-1;">
-               <div style="font-size:11px;color:var(--sub);">開始月</div>
-               <input class="fi" type="month" value="${esc(it.startMonth||'')}"
-                 onchange="saveBreakdownField('${cat}','${nameEs}','startMonth',this.value)"
-                 style="width:100%;font-size:13px;padding:6px 8px;">
-             </div>
-             <div style="grid-column:1/-1;text-align:right;">
-               <button onclick="deleteBreakdownItemAndRefresh('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 6px;">🗑 このバケツを削除</button>
-             </div>
-           </div>`;
-      html += `
-        <div class="card" style="margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
-            <span style="font-weight:600;font-size:15px;">${esc(it.name)}</span>
-            <span style="font-weight:700;font-size:18px;color:${balColor};">${yenSigned(it.balance)}</span>
-          </div>
-          ${it.monthSpend > 0 ? `<div style="font-size:12px;color:var(--danger);margin-top:4px;">当月支出: -${yen(it.monthSpend)}（${it.expenses.length}件）</div>${rows}` : ''}
-          ${cfgBlock}
-        </div>`;
-    });
+  }
+
+  // バケツを1件ずつカード表示
+  const esQ = s => esc(s).replace(/'/g, "&#39;");
+  items.forEach(it => {
+    const nameEs = esQ(it.name);
+    const bal = bucketDisplayBalance(curMonth, cat, it.name);
+    const monthSpend = currentMonthSpendForBreakdown(curMonth, cat, it.name);
+    const monthAdj   = getBucketAdj(curMonth, cat, it.name);
+    const balColor = bal < 0 ? 'var(--danger)' : (bal === 0 ? 'var(--sub)' : 'var(--text)');
+    const expenses = (md.expenses || []).filter(e => e.payType === cat && (e.breakdown||'') === it.name)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    const expRows = expenses.map(e => {
+      const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+      return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
+        <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
+      </div>`;
+    }).join('');
+    html += `
+      <div class="card" style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
+          <span style="font-weight:600;font-size:15px;">${esc(it.name)}</span>
+          <span style="font-weight:700;font-size:18px;color:${balColor};">${yenSigned(bal)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px;">当月調整: ${yenSigned(monthAdj)}${monthSpend?`　当月支出: -${yen(monthSpend)}`:''}</div>
+        ${expRows}
+        <div style="text-align:right;margin-top:6px;">
+          <button onclick="deleteBreakdownItem('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 6px;">🗑 削除</button>
+        </div>
+      </div>`;
+  });
+
+  // 未分類バケツ
+  const uncBal = unallocatedBreakdownBalance(curMonth, cat);
+  const uncExpenses = (md.expenses || []).filter(e => e.payType === cat && !(e.breakdown||''))
+    .sort((a,b) => a.date.localeCompare(b.date));
+  if (uncBal !== 0 || uncExpenses.length) {
+    const uncColor = uncBal < 0 ? 'var(--danger)' : (uncBal === 0 ? 'var(--sub)' : 'var(--text)');
+    const uncExpRows = uncExpenses.map(e => {
+      const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+      return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
+        <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
+      </div>`;
+    }).join('');
+    html += `
+      <div class="card" style="margin-bottom:8px;background:var(--fill);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
+          <span style="font-weight:600;font-size:15px;">未分類</span>
+          <span style="font-weight:700;font-size:18px;color:${uncColor};">${yenSigned(uncBal)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px;">親カテゴリ残高 − バケツ合計（未割当ぶん）</div>
+        ${uncExpRows}
+      </div>`;
   }
 
   bodyEl.innerHTML = html;
@@ -5189,19 +5079,29 @@ function openBudgetDetail(cat) {
 
   // 内訳バケツ残高（特別費・敵３のみ）
   if (BREAKDOWN_CATS.includes(cat)) {
-    const bdItems = aggregateBreakdown(curMonth, cat);
-    const shown = bdItems.filter(it => it.balance !== 0 || it.monthSpend !== 0);
+    const items = getBreakdownItems(cat);
+    const rows = items.map(it => ({
+      name: it.name,
+      balance: bucketDisplayBalance(curMonth, cat, it.name),
+      monthSpend: currentMonthSpendForBreakdown(curMonth, cat, it.name)
+    }));
+    const uncBal = unallocatedBreakdownBalance(curMonth, cat);
+    const uncSpend = currentMonthSpendForBreakdown(curMonth, cat, '');
+    if (uncBal !== 0 || uncSpend !== 0) {
+      rows.push({ name: '未分類', balance: uncBal, monthSpend: uncSpend });
+    }
+    const shown = rows.filter(r => r.balance !== 0 || r.monthSpend !== 0);
     if (shown.length) {
       html += `<div class="detail-block">
         <div class="detail-block-title">内訳バケツ残高</div>`;
-      shown.forEach(it => {
-        const balColor = it.balance < 0 ? 'var(--danger)' : (it.balance === 0 ? 'var(--sub)' : 'var(--text)');
-        const spendLine = it.monthSpend > 0
-          ? `<span style="color:var(--sub);font-size:11px;">当月-${yen(it.monthSpend)}</span>`
+      shown.forEach(r => {
+        const balColor = r.balance < 0 ? 'var(--danger)' : (r.balance === 0 ? 'var(--sub)' : 'var(--text)');
+        const spendLine = r.monthSpend > 0
+          ? `<span style="color:var(--sub);font-size:11px;">当月-${yen(r.monthSpend)}</span>`
           : '';
         html += `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-bottom:0.5px solid var(--sep);">
-          <span style="font-size:14px;">${esc(it.name)} ${spendLine}</span>
-          <span style="font-weight:600;color:${balColor};">${yenSigned(it.balance)}</span>
+          <span style="font-size:14px;">${esc(r.name)} ${spendLine}</span>
+          <span style="font-weight:600;color:${balColor};">${yenSigned(r.balance)}</span>
         </div>`;
       });
       const tabName = cat === '特別費' ? 'tokubetsu' : 'teki3';
@@ -5469,16 +5369,48 @@ function renderSettings() {
   document.getElementById('budget-settings-monthly').innerHTML   = monthlyCats.map(budgetRow).join('');
   // adjustments（マイナス入力可 → inputmode="text"でフルキーボード）
   const md = mdata(curMonth);
-  document.getElementById('adj-settings').innerHTML = CATS.map(cat => `
-    <div class="set-row">
-      <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="text" inputmode="text"
-             value="${fmtYenVal((md.adj||{})[cat]||0)}"
-             onfocus="unfmtInput(this)"
-             onblur="fmtInput(this);saveAdj('${cat}',this.value)">
-    </div>`).join('');
-  // breakdown items
-  BREAKDOWN_CATS.forEach(cat => renderBreakdownSettings(cat));
+  const esQ = s => esc(s).replace(/'/g, "&#39;");
+  document.getElementById('adj-settings').innerHTML = CATS.map(cat => {
+    if (BREAKDOWN_CATS.includes(cat)) {
+      // 特別費・敵３: 親（自動サマ、読取専用）+ 子バケツ（編集可）
+      const parentSum = sumBucketAdj(curMonth, cat);
+      const buckets = getBreakdownItems(cat);
+      let block = `
+        <div class="set-row" style="border-bottom:0.5px solid var(--sep);">
+          <span class="set-label" style="font-weight:700;">${esc(cat)}</span>
+          <input class="set-input" type="text" readonly value="${fmtYenVal(parentSum)}"
+                 style="color:var(--sub);cursor:default;background:transparent;text-align:right;">
+        </div>`;
+      if (!buckets.length) {
+        block += `<div style="padding:6px 12px 10px;font-size:11px;color:var(--sub);">
+          ${esc(cat)}タブでバケツを追加してください
+        </div>`;
+      } else {
+        buckets.forEach(bd => {
+          const val = getBucketAdj(curMonth, cat, bd.name);
+          const nameEs = esQ(bd.name);
+          block += `
+            <div class="set-row" style="padding-left:24px;">
+              <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
+              <input class="set-input" type="text" inputmode="text"
+                     value="${fmtYenVal(val)}"
+                     onfocus="unfmtInput(this)"
+                     onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
+            </div>`;
+        });
+      }
+      return block;
+    }
+    // その他カテゴリ: 通常入力
+    return `
+      <div class="set-row">
+        <span class="set-label">${esc(cat)}</span>
+        <input class="set-input" type="text" inputmode="text"
+               value="${fmtYenVal((md.adj||{})[cat]||0)}"
+               onfocus="unfmtInput(this)"
+               onblur="fmtInput(this);saveAdj('${cat}',this.value)">
+      </div>`;
+  }).join('');
   // recurring expense
   renderRecList();
 }
@@ -6521,7 +6453,7 @@ function refreshBreakdownSelect(selectedValue) {
   const items = getBreakdownItems(payType);
   sel.innerHTML = '<option value="">未分類</option>' +
     items.map(it => {
-      const bal = breakdownBalance(mk, payType, it.name);
+      const bal = bucketDisplayBalance(mk, payType, it.name);
       return `<option value="${esc(it.name)}">${esc(it.name)}（残: ${yenSigned(bal)}）</option>`;
     }).join('');
   if (selectedValue !== undefined) sel.value = selectedValue;
