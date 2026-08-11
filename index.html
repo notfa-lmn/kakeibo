@@ -2529,9 +2529,9 @@ function withdrawalSum(mk, cat) {
 function budgetBalance(mk, cat) {
   const md = mdata(mk);
   const base = D.settings.budgets[cat] || 0;
-  // BREAKDOWN_CATS の親カテゴリ調整は各バケツ調整の合計を使用
+  // BREAKDOWN_CATS: 親カテゴリ調整 = 手動入力 (md.adj) + 各バケツ調整の合計
   const manAdj = BREAKDOWN_CATS.includes(cat)
-    ? sumBucketAdj(mk, cat)
+    ? (md.adj[cat] || 0) + sumBucketAdj(mk, cat)
     : (md.adj[cat] || 0);
   const autoNmAdj = (md.nmAdj && md.nmAdj[cat]) || 0;
   const prevKey = prevMk(mk);
@@ -5372,8 +5372,9 @@ function renderSettings() {
   const esQ = s => esc(s).replace(/'/g, "&#39;");
   document.getElementById('adj-settings').innerHTML = CATS.map(cat => {
     if (BREAKDOWN_CATS.includes(cat)) {
-      // 特別費・敵３: 親（自動サマ、読取専用）+ 子バケツ（編集可）
-      const parentSum = sumBucketAdj(curMonth, cat);
+      // 特別費・敵３: 親（自動サマ、読取専用）+ 子バケツ（編集可）+ その他調整（バケツ外）
+      const otherAdj = (md.adj || {})[cat] || 0;
+      const parentSum = otherAdj + sumBucketAdj(curMonth, cat);
       const buckets = getBreakdownItems(cat);
       let block = `
         <div class="set-row" style="border-bottom:0.5px solid var(--sep);">
@@ -5381,23 +5382,31 @@ function renderSettings() {
           <input class="set-input" type="text" readonly value="${fmtYenVal(parentSum)}"
                  style="color:var(--sub);cursor:default;background:transparent;text-align:right;">
         </div>`;
+      buckets.forEach(bd => {
+        const val = getBucketAdj(curMonth, cat, bd.name);
+        const nameEs = esQ(bd.name);
+        block += `
+          <div class="set-row" style="padding-left:24px;">
+            <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
+            <input class="set-input" type="text" inputmode="text"
+                   value="${fmtYenVal(val)}"
+                   onfocus="unfmtInput(this)"
+                   onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
+          </div>`;
+      });
+      // その他調整（バケツに紐づかない親カテゴリ調整）— 過去データの継続用途で常時表示
+      block += `
+        <div class="set-row" style="padding-left:24px;">
+          <span class="set-label" style="font-size:13px;color:var(--sub);">└ その他</span>
+          <input class="set-input" type="text" inputmode="text"
+                 value="${fmtYenVal(otherAdj)}"
+                 onfocus="unfmtInput(this)"
+                 onblur="fmtInput(this);saveAdj('${cat}',this.value)">
+        </div>`;
       if (!buckets.length) {
         block += `<div style="padding:6px 12px 10px;font-size:11px;color:var(--sub);">
-          ${esc(cat)}タブでバケツを追加してください
+          ${esc(cat)}タブでバケツを追加すると、ここに各バケツの調整入力欄が追加されます
         </div>`;
-      } else {
-        buckets.forEach(bd => {
-          const val = getBucketAdj(curMonth, cat, bd.name);
-          const nameEs = esQ(bd.name);
-          block += `
-            <div class="set-row" style="padding-left:24px;">
-              <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
-              <input class="set-input" type="text" inputmode="text"
-                     value="${fmtYenVal(val)}"
-                     onfocus="unfmtInput(this)"
-                     onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
-            </div>`;
-        });
       }
       return block;
     }
