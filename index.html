@@ -1238,7 +1238,7 @@
       <div id="breakdown-list-特別費" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
       <div style="display:flex;gap:6px;padding:6px 4px;">
         <input class="fi" type="text" id="breakdown-new-特別費" placeholder="例：国内旅行" style="flex:1;">
-        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('特別費')">追加</button>
+        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('特別費')">追加</button>
       </div>
     </div>
 
@@ -1247,7 +1247,7 @@
       <div id="breakdown-list-敵３" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
       <div style="display:flex;gap:6px;padding:6px 4px;">
         <input class="fi" type="text" id="breakdown-new-敵３" placeholder="例：家電購入" style="flex:1;">
-        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('敵３')">追加</button>
+        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('敵３')">追加</button>
       </div>
     </div>
 
@@ -3511,9 +3511,13 @@ function breakdownBalance(mk, cat, bdName) {
   return budget - spend;
 }
 
-// 未分類（内訳なし）の累計残高（マイナス値で赤字を可視化）
+// 未分類（内訳なし）の残高 = 親カテゴリ残高 − バケツ合計残高
+// これによりバケツ合計 + 未分類 = 親カテゴリ残高が常に成立する
 function unallocatedBreakdownBalance(mk, cat) {
-  return -totalSpendForBreakdown(cat, '', mk);
+  const parentBal = displayBudgetBalance(mk, cat);
+  const bucketsTotal = getBreakdownItems(cat)
+    .reduce((s, it) => s + breakdownBalance(mk, cat, it.name), 0);
+  return parentBal - bucketsTotal;
 }
 
 // 当月の支出（バケツ内訳の累計ではなく、mk月内のみ）
@@ -3574,7 +3578,6 @@ function renderBreakdownScreen(cat) {
   const parentSpent = parentBud - parentBal;
   const items       = aggregateBreakdown(curMonth, cat);
   const bucketsTotal = items.reduce((s, it) => s + it.balance, 0);
-  const drift = parentBal - bucketsTotal;
 
   let html = `
     <div class="card" style="margin:12px 0 16px;">
@@ -3590,7 +3593,6 @@ function renderBreakdownScreen(cat) {
       <div style="display:flex;justify-content:space-between;padding:6px 0 0;font-size:12px;color:var(--sub);">
         <span>内訳バケツ合計残高</span><span>${yenSigned(bucketsTotal)}</span>
       </div>
-      ${drift !== 0 ? `<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ 親残高との差 ${yenSigned(drift)}（月次積立額の合計を親の月次予算と揃える or 開始残高を調整してください）</div>` : ''}
     </div>`;
 
   // ＋ 新規バケツを追加
@@ -3599,7 +3601,7 @@ function renderBreakdownScreen(cat) {
     <div class="card" style="margin-bottom:12px;">
       <div style="display:flex;gap:6px;">
         <input class="fi" type="text" id="${addInputId}" placeholder="例：国内旅行" style="flex:1;font-size:13px;padding:8px 10px;">
-        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('${cat}','${addInputId}')">＋ 追加</button>
+        <button class="btn btn-s" style="width:auto;padding:8px 14px;font-size:13px;flex-shrink:0;" onclick="addBreakdownItem('${cat}','${addInputId}')">＋ 追加</button>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:6px;">追加後、下のカードで月次積立・開始残高・開始月を設定してください</div>
     </div>`;
