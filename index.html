@@ -3452,7 +3452,16 @@ function deleteBreakdownItem(cat, name) {
 // 設定画面「今月の予算調整」からバケツ調整額を保存
 function saveBucketAdjInput(cat, bdName, val) {
   setBucketAdj(curMonth, cat, bdName, parseYen(val));
-  if (curScreen === 'settings') renderScreen();
+  if (curScreen === 'settings' || curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+}
+
+// タブから「その他調整」(md.adj[cat]) を編集
+function saveOtherAdjFromTab(cat, val) {
+  const md = mdata(curMonth);
+  if (!md.adj) md.adj = {};
+  md.adj[cat] = parseYen(val);
+  save();
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
 }
 
 // 特別費/敵３タブの描画（バケツ名の追加・削除と残高表示のみ）
@@ -3499,7 +3508,12 @@ function renderBreakdownScreen(cat) {
     </div></div>`;
   }
 
-  // バケツを1件ずつカード表示
+  // 振り分けのヒント
+  html += `<div style="font-size:11px;color:var(--sub);padding:0 4px 8px;">
+    💡 未分類の「その他調整」を減らして、バケツの「当月調整」を同額増やすと振り分けができます
+  </div>`;
+
+  // バケツを1件ずつカード表示（当月調整を編集可能）
   const esQ = s => esc(s).replace(/'/g, "&#39;");
   items.forEach(it => {
     const nameEs = esQ(it.name);
@@ -3521,7 +3535,14 @@ function renderBreakdownScreen(cat) {
           <span style="font-weight:600;font-size:15px;">${esc(it.name)}</span>
           <span style="font-weight:700;font-size:18px;color:${balColor};">${yenSigned(bal)}</span>
         </div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px;">当月調整: ${yenSigned(monthAdj)}${monthSpend?`　当月支出: -${yen(monthSpend)}`:''}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <label style="font-size:11px;color:var(--sub);flex-shrink:0;">当月調整</label>
+          <input class="fi" type="text" inputmode="text" value="${fmtYenVal(monthAdj)}"
+            onfocus="unfmtInput(this)"
+            onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)"
+            style="flex:1;font-size:13px;padding:6px 8px;">
+        </div>
+        ${monthSpend?`<div style="font-size:11px;color:var(--danger);margin-top:6px;">当月支出: -${yen(monthSpend)}（${expenses.length}件）</div>`:''}
         ${expRows}
         <div style="text-align:right;margin-top:6px;">
           <button onclick="deleteBreakdownItem('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 6px;">🗑 削除</button>
@@ -3529,28 +3550,34 @@ function renderBreakdownScreen(cat) {
       </div>`;
   });
 
-  // 未分類バケツ
+  // 未分類バケツ（バケツに紐づかない残高、その他調整を編集可能）
   const uncBal = unallocatedBreakdownBalance(curMonth, cat);
+  const otherAdj = (md.adj||{})[cat]||0;
   const uncExpenses = (md.expenses || []).filter(e => e.payType === cat && !(e.breakdown||''))
     .sort((a,b) => a.date.localeCompare(b.date));
-  if (uncBal !== 0 || uncExpenses.length) {
-    const uncColor = uncBal < 0 ? 'var(--danger)' : (uncBal === 0 ? 'var(--sub)' : 'var(--text)');
-    const uncExpRows = uncExpenses.map(e => {
-      const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
-      return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
-        <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
-      </div>`;
-    }).join('');
-    html += `
-      <div class="card" style="margin-bottom:8px;background:var(--fill);">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
-          <span style="font-weight:600;font-size:15px;">未分類</span>
-          <span style="font-weight:700;font-size:18px;color:${uncColor};">${yenSigned(uncBal)}</span>
-        </div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px;">親カテゴリ残高 − バケツ合計（未割当ぶん）</div>
-        ${uncExpRows}
-      </div>`;
-  }
+  const uncColor = uncBal < 0 ? 'var(--danger)' : (uncBal === 0 ? 'var(--sub)' : 'var(--text)');
+  const uncExpRows = uncExpenses.map(e => {
+    const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+    return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
+      <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
+    </div>`;
+  }).join('');
+  html += `
+    <div class="card" style="margin-bottom:8px;background:var(--fill);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
+        <span style="font-weight:600;font-size:15px;">未分類</span>
+        <span style="font-weight:700;font-size:18px;color:${uncColor};">${yenSigned(uncBal)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:2px;">親カテゴリ残高 − バケツ合計（未割当ぶん）</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <label style="font-size:11px;color:var(--sub);flex-shrink:0;">その他調整</label>
+        <input class="fi" type="text" inputmode="text" value="${fmtYenVal(otherAdj)}"
+          onfocus="unfmtInput(this)"
+          onblur="fmtInput(this);saveOtherAdjFromTab('${cat}',this.value)"
+          style="flex:1;font-size:13px;padding:6px 8px;">
+      </div>
+      ${uncExpRows}
+    </div>`;
 
   bodyEl.innerHTML = html;
 }
