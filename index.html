@@ -3387,9 +3387,10 @@ function saveBreakdownField(cat, name, field, value) {
   if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
 }
 
-function addBreakdownItem(cat) {
+function addBreakdownItem(cat, inputId) {
   initBreakdowns();
-  const input = document.getElementById(`breakdown-new-${cat}`);
+  const input = document.getElementById(inputId || `breakdown-new-${cat}`);
+  if (!input) return;
   const name = (input.value || '').trim();
   if (!name) return;
   const list = D.settings.breakdowns[cat];
@@ -3399,7 +3400,14 @@ function addBreakdownItem(cat) {
   list.push({ name, monthlyAlloc: 0, seed: 0, startMonth: curMonth });
   save();
   input.value = '';
+  // 呼び出し元に応じた再描画
   renderBreakdownSettings(cat);
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+}
+
+function deleteBreakdownItemAndRefresh(cat, name) {
+  deleteBreakdownItem(cat, name);
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
 }
 
 function deleteBreakdownItem(cat, name) {
@@ -3585,15 +3593,26 @@ function renderBreakdownScreen(cat) {
       ${drift !== 0 ? `<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ 親残高との差 ${yenSigned(drift)}（月次積立額の合計を親の月次予算と揃える or 開始残高を調整してください）</div>` : ''}
     </div>`;
 
-  html += `<div class="section-title" style="padding-left:0;">内訳バケツ</div>`;
+  // ＋ 新規バケツを追加
+  const addInputId = `bd-tab-new-${cat}`;
+  html += `<div class="section-title" style="padding-left:0;">内訳バケツ</div>
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;gap:6px;">
+        <input class="fi" type="text" id="${addInputId}" placeholder="例：国内旅行" style="flex:1;font-size:13px;padding:8px 10px;">
+        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('${cat}','${addInputId}')">＋ 追加</button>
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:6px;">追加後、下のカードで月次積立・開始残高・開始月を設定してください</div>
+    </div>`;
+
   if (!items.length) {
     html += `<div class="card"><div style="text-align:center;color:var(--sub);padding:20px;font-size:13px;">
-      内訳バケツが未設定です。<br>
-      設定タブで「${cat} 内訳項目」を追加してください。
+      バケツを追加すると、ここに残高が表示されます。
     </div></div>`;
   } else {
+    const esQ = s => esc(s).replace(/'/g, "&#39;");
     items.forEach(it => {
       const isUncat = it.name === '未分類';
+      const nameEs = esQ(it.name);
       const balColor = it.balance < 0 ? 'var(--danger)' : (it.balance === 0 ? 'var(--sub)' : 'var(--text)');
       const rows = it.expenses.sort((a,b) => a.date.localeCompare(b.date)).map(e => {
         const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
@@ -3601,17 +3620,42 @@ function renderBreakdownScreen(cat) {
           <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
         </div>`;
       }).join('');
-      const cfgLine = isUncat
-        ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">内訳未設定の支出</div>'
-        : `<div style="font-size:11px;color:var(--sub);margin-top:2px;">月次+${yen(it.monthlyAlloc)}　開始残高: ${yen(it.seed)}${it.startMonth?`（${it.startMonth}〜）`:''}</div>`;
+      const cfgBlock = isUncat
+        ? '<div style="font-size:11px;color:var(--sub);margin-top:2px;">内訳未設定の支出（内訳バケツを設定または既存支出を編集して振り分けてください）</div>'
+        : `<div style="font-size:11px;color:var(--sub);margin-top:6px;padding-top:6px;border-top:0.5px dashed var(--sep);">バケツ設定</div>
+           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-top:6px;">
+             <div>
+               <div style="font-size:11px;color:var(--sub);">月次積立額</div>
+               <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.monthlyAlloc||0)}"
+                 onfocus="unfmtInput(this)"
+                 onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','monthlyAlloc',parseYen(this.value))"
+                 style="width:100%;font-size:13px;padding:6px 8px;">
+             </div>
+             <div>
+               <div style="font-size:11px;color:var(--sub);">開始残高</div>
+               <input class="fi" type="text" inputmode="numeric" value="${fmtYenVal(it.seed||0)}"
+                 onfocus="unfmtInput(this)"
+                 onblur="fmtInput(this);saveBreakdownField('${cat}','${nameEs}','seed',parseYen(this.value))"
+                 style="width:100%;font-size:13px;padding:6px 8px;">
+             </div>
+             <div style="grid-column:1/-1;">
+               <div style="font-size:11px;color:var(--sub);">開始月</div>
+               <input class="fi" type="month" value="${esc(it.startMonth||'')}"
+                 onchange="saveBreakdownField('${cat}','${nameEs}','startMonth',this.value)"
+                 style="width:100%;font-size:13px;padding:6px 8px;">
+             </div>
+             <div style="grid-column:1/-1;text-align:right;">
+               <button onclick="deleteBreakdownItemAndRefresh('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 6px;">🗑 このバケツを削除</button>
+             </div>
+           </div>`;
       html += `
         <div class="card" style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
             <span style="font-weight:600;font-size:15px;">${esc(it.name)}</span>
             <span style="font-weight:700;font-size:18px;color:${balColor};">${yenSigned(it.balance)}</span>
           </div>
-          ${cfgLine}
           ${it.monthSpend > 0 ? `<div style="font-size:12px;color:var(--danger);margin-top:4px;">当月支出: -${yen(it.monthSpend)}（${it.expenses.length}件）</div>${rows}` : ''}
+          ${cfgBlock}
         </div>`;
     });
   }
