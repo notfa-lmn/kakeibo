@@ -948,8 +948,11 @@
     <button class="sb-nav-btn" id="sb-nav-list" onclick="openFilteredList('all')">
       <span class="sb-nav-icon">📋</span><span>収支一覧</span>
     </button>
-    <button class="sb-nav-btn" id="sb-nav-analytics" onclick="switchScreen('analytics')">
-      <span class="sb-nav-icon">📊</span><span>分析</span>
+    <button class="sb-nav-btn" id="sb-nav-tokubetsu" onclick="switchScreen('tokubetsu')">
+      <span class="sb-nav-icon">🎁</span><span>特別費</span>
+    </button>
+    <button class="sb-nav-btn" id="sb-nav-teki3" onclick="switchScreen('teki3')">
+      <span class="sb-nav-icon">⚔️</span><span>敵３</span>
     </button>
     <button class="sb-nav-btn" id="sb-nav-settings" onclick="switchScreen('settings')">
       <span class="sb-nav-icon">⚙️</span><span>設定</span>
@@ -1082,6 +1085,13 @@
         <option value="投資待機資金">投資待機資金</option>
       </select>
     </div>
+    <!-- Breakdown (特別費/敵３のみ) -->
+    <div class="fg" id="f-breakdown-wrap" style="display:none;">
+      <label>内訳</label>
+      <select class="fs" id="f-breakdown">
+        <option value="">未分類</option>
+      </select>
+    </div>
     <!-- 支払元予算 (auto) + 振込金額 (manual) -->
     <div class="form-row">
       <div class="fg">
@@ -1181,6 +1191,26 @@
   <div class="list-wrap" id="expense-list"></div>
 </div>
 
+<!-- ═══════════════════════════════════ TOKUBETSU BREAKDOWN -->
+<div id="scr-tokubetsu" class="screen">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="navMonth(-1)">‹</button>
+    <span class="month-nav-label" id="tokubetsu-month"></span>
+    <button class="month-nav-btn" onclick="navMonth(1)">›</button>
+  </div>
+  <div id="tokubetsu-body" style="padding:0 16px 24px;"></div>
+</div>
+
+<!-- ═══════════════════════════════════ TEKI3 BREAKDOWN -->
+<div id="scr-teki3" class="screen">
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="navMonth(-1)">‹</button>
+    <span class="month-nav-label" id="teki3-month"></span>
+    <button class="month-nav-btn" onclick="navMonth(1)">›</button>
+  </div>
+  <div id="teki3-body" style="padding:0 16px 24px;"></div>
+</div>
+
 <!-- ═══════════════════════════════════ SETTINGS -->
 <div id="scr-settings" class="screen">
   <div class="settings-wrap">
@@ -1200,6 +1230,25 @@
     <div class="set-card">
       <div id="adj-settings"></div>
       <div class="set-note">※前月に次月分の予算を使った場合などの調整額（マイナス入力でOK）<br>※前月の「次月振込予定」は自動反映されます</div>
+    </div>
+
+    <!-- Breakdown items management -->
+    <div class="section-title" style="padding-left:0;">特別費 内訳項目</div>
+    <div class="set-card">
+      <div id="breakdown-list-特別費" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
+      <div style="display:flex;gap:6px;padding:6px 4px;">
+        <input class="fi" type="text" id="breakdown-new-特別費" placeholder="例：国内旅行" style="flex:1;">
+        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('特別費')">追加</button>
+      </div>
+    </div>
+
+    <div class="section-title" style="padding-left:0;">敵３ 内訳項目</div>
+    <div class="set-card">
+      <div id="breakdown-list-敵３" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 4px;"></div>
+      <div style="display:flex;gap:6px;padding:6px 4px;">
+        <input class="fi" type="text" id="breakdown-new-敵３" placeholder="例：家電購入" style="flex:1;">
+        <button class="btn btn-s" style="padding:8px 14px;" onclick="addBreakdownItem('敵３')">追加</button>
+      </div>
     </div>
 
     <!-- Recurring expenses -->
@@ -1267,9 +1316,13 @@
       <button class="fab-menu-btn" onclick="closeFabMenu();openCompanySalesModal()">🏢 会社売上を手入力</button>
     </div>
   </div>
-  <button class="nav-btn" id="nav-analytics" onclick="switchScreen('analytics')">
-    <span class="nav-icon">📊</span>
-    <span class="nav-label">分析</span>
+  <button class="nav-btn" id="nav-tokubetsu" onclick="switchScreen('tokubetsu')">
+    <span class="nav-icon">🎁</span>
+    <span class="nav-label">特別費</span>
+  </button>
+  <button class="nav-btn" id="nav-teki3" onclick="switchScreen('teki3')">
+    <span class="nav-icon">⚔️</span>
+    <span class="nav-label">敵３</span>
   </button>
   <button class="nav-btn" id="nav-settings" onclick="switchScreen('settings')">
     <span class="nav-icon">⚙️</span>
@@ -2312,17 +2365,29 @@ let recIncListOpen = localStorage.getItem('recIncListOpen') === '1';
 // ═══════════════════════════════════════════════════
 //  DATA
 // ═══════════════════════════════════════════════════
+// 内訳（サブカテゴリ）を持つ予算カテゴリ
+const BREAKDOWN_CATS = ['特別費', '敵３'];
+
 function defaultData() {
   return {
     v: 2,
     settings: {
       budgets: { 特別費:0, 配当金:0, 敵３:0, 食料品:0, お小遣い:0, 日用品:0, 投資待機資金:0 },
       recurring: [],
+      breakdowns: { '特別費': [], '敵３': [] },
       expenseCats: JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS))
     },
     months: {},
     mfData: {}
   };
+}
+
+// D.settings.breakdowns の初期化（既存データ用）
+function initBreakdowns() {
+  if (!D.settings.breakdowns) D.settings.breakdowns = {};
+  BREAKDOWN_CATS.forEach(cat => {
+    if (!Array.isArray(D.settings.breakdowns[cat])) D.settings.breakdowns[cat] = [];
+  });
 }
 
 // 旧仕様では applyNmAdj が md.adj[NM_ADJ_CATS] を上書きしていたため
@@ -3279,6 +3344,126 @@ function deleteWithdrawal() {
 }
 
 // ═══════════════════════════════════════════════════
+//  BREAKDOWN（特別費・敵３ の内訳項目管理と集計）
+// ═══════════════════════════════════════════════════
+function addBreakdownItem(cat) {
+  initBreakdowns();
+  const input = document.getElementById(`breakdown-new-${cat}`);
+  const name = (input.value || '').trim();
+  if (!name) return;
+  const list = D.settings.breakdowns[cat];
+  if (list.includes(name)) { alert('同名の内訳項目が既にあります'); return; }
+  list.push(name);
+  save();
+  input.value = '';
+  renderBreakdownSettings(cat);
+}
+
+function deleteBreakdownItem(cat, name) {
+  initBreakdowns();
+  // 既存の支出で使われているか確認
+  let usedCount = 0;
+  Object.values(D.months || {}).forEach(m => {
+    (m.expenses || []).forEach(e => {
+      if (e.payType === cat && e.breakdown === name) usedCount++;
+    });
+  });
+  const msg = usedCount > 0
+    ? `「${name}」は ${usedCount} 件の支出で使用されています。削除しても既存の支出は残り、内訳は「未分類」扱いになります。削除しますか？`
+    : `「${name}」を削除しますか？`;
+  if (!confirm(msg)) return;
+  D.settings.breakdowns[cat] = D.settings.breakdowns[cat].filter(x => x !== name);
+  save();
+  renderBreakdownSettings(cat);
+}
+
+function renderBreakdownSettings(cat) {
+  const list = (D.settings.breakdowns && D.settings.breakdowns[cat]) || [];
+  const el = document.getElementById(`breakdown-list-${cat}`);
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = `<div style="color:var(--sub);font-size:13px;padding:4px 6px;">まだ項目がありません</div>`;
+    return;
+  }
+  el.innerHTML = list.map(name => `
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--fill);border-radius:14px;padding:5px 10px 5px 12px;font-size:13px;">
+      ${esc(name)}
+      <button onclick="deleteBreakdownItem('${cat}','${esc(name).replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;">×</button>
+    </span>`).join('');
+}
+
+// カテゴリ×月の支出を内訳ごとに集計 → [{name, total, expenses:[]}, ...] + uncategorized
+function aggregateBreakdown(mk, cat) {
+  const md = mdata(mk);
+  const items = (D.settings.breakdowns && D.settings.breakdowns[cat]) || [];
+  const buckets = {};
+  items.forEach(name => { buckets[name] = { name, total: 0, expenses: [] }; });
+  const uncat = { name: '未分類', total: 0, expenses: [] };
+  (md.expenses || []).filter(e => e.payType === cat).forEach(e => {
+    const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+    const bd = e.breakdown && buckets[e.breakdown] ? buckets[e.breakdown] : uncat;
+    bd.total += alloc;
+    bd.expenses.push(e);
+  });
+  const list = items.map(n => buckets[n]);
+  if (uncat.expenses.length) list.push(uncat);
+  return list;
+}
+
+function renderBreakdownScreen(cat) {
+  const monthLabelEl = document.getElementById(cat === '特別費' ? 'tokubetsu-month' : 'teki3-month');
+  const bodyEl       = document.getElementById(cat === '特別費' ? 'tokubetsu-body'  : 'teki3-body');
+  if (!monthLabelEl || !bodyEl) return;
+  monthLabelEl.textContent = monthLabel(curMonth);
+
+  const bal   = displayBudgetBalance(curMonth, cat);
+  const bud   = budgetBalance(curMonth, cat);
+  const spent = bud - bal;
+  const items = aggregateBreakdown(curMonth, cat);
+
+  let html = `
+    <div class="card" style="margin:12px 0 16px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--sub);padding:2px 0;">
+        <span>今月の予算（繰越含む）</span><span>${yen(bud)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--danger);padding:2px 0;">
+        <span>今月の支出</span><span>-${yen(spent)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-top:0.5px solid var(--sep);margin-top:6px;padding-top:8px;font-size:15px;font-weight:700;">
+        <span>今月の予算残高</span><span style="color:${bal<0?'var(--danger)':'var(--text)'};">${yenSigned(bal)}</span>
+      </div>
+    </div>`;
+
+  html += `<div class="section-title" style="padding-left:0;">内訳別 支出</div>`;
+  if (!items.length || items.every(it => it.total === 0)) {
+    html += `<div class="card"><div style="text-align:center;color:var(--sub);padding:20px;font-size:13px;">
+      内訳に該当する支出がまだありません。<br>
+      設定タブで内訳項目を追加し、支出入力時に選択してください。
+    </div></div>`;
+  } else {
+    items.forEach(it => {
+      const rows = it.expenses.sort((a,b) => a.date.localeCompare(b.date)).map(e => {
+        const alloc = e.budgetAlloc != null ? e.budgetAlloc : (e.amount || 0);
+        return `<div style="display:flex;justify-content:space-between;padding:5px 8px;font-size:12px;color:var(--sub);">
+          <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>${yen(alloc)}</span>
+        </div>`;
+      }).join('');
+      html += `
+        <div class="card" style="margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
+            <span style="font-weight:600;font-size:15px;">${esc(it.name)}</span>
+            <span style="font-weight:700;font-size:16px;color:var(--danger);">${yen(it.total)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--sub);margin:2px 0 4px;">${it.expenses.length}件</div>
+          ${rows}
+        </div>`;
+    });
+  }
+
+  bodyEl.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════════
 function navMonth(dir) {
@@ -3301,14 +3486,14 @@ function switchScreen(name) {
   curScreen = name;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + name).classList.add('active');
-  ['summary','list','analytics','settings'].forEach(n => {
+  ['summary','list','tokubetsu','teki3','settings'].forEach(n => {
     const el = document.getElementById('nav-' + n);
     if (el) el.classList.toggle('active', n === name);
     const sb = document.getElementById('sb-nav-' + n);
     if (sb) sb.classList.toggle('active', n === name);
   });
   syncSidebarMonth();
-  const titles = { summary:'サマリー', add:'支出を入力', list:'収支一覧', analytics:'月次分析', settings:'設定' };
+  const titles = { summary:'サマリー', add:'支出を入力', list:'収支一覧', tokubetsu:'特別費 内訳', teki3:'敵３ 内訳', settings:'設定' };
   document.getElementById('hdr-title').textContent = titles[name] || '';
   if (name === 'add') {
     if (!editId) resetForm();
@@ -3322,7 +3507,8 @@ function switchScreen(name) {
 function renderScreen() {
   if (curScreen === 'summary') renderSummary();
   else if (curScreen === 'list') renderList();
-  else if (curScreen === 'analytics') renderAnalytics();
+  else if (curScreen === 'tokubetsu') renderBreakdownScreen('特別費');
+  else if (curScreen === 'teki3') renderBreakdownScreen('敵３');
   else if (curScreen === 'settings') renderSettings();
 }
 
@@ -4799,6 +4985,26 @@ function openBudgetDetail(cat) {
   }
   html += '</div>';
 
+  // 内訳集計（特別費・敵３のみ）
+  if (BREAKDOWN_CATS.includes(cat)) {
+    const bdItems = aggregateBreakdown(curMonth, cat);
+    const nonZero = bdItems.filter(it => it.total !== 0);
+    if (nonZero.length) {
+      html += `<div class="detail-block">
+        <div class="detail-block-title">内訳別 集計</div>`;
+      nonZero.forEach(it => {
+        html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--sep);">
+          <span style="font-size:14px;">${esc(it.name)} <span style="color:var(--sub);font-size:11px;">(${it.expenses.length}件)</span></span>
+          <span style="font-weight:600;">${yen(it.total)}</span>
+        </div>`;
+      });
+      const tabName = cat === '特別費' ? 'tokubetsu' : 'teki3';
+      html += `<div style="text-align:center;margin-top:10px;">
+        <button onclick="closeDetailModal();switchScreen('${tabName}')" style="background:var(--fill);border:none;color:var(--primary);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">${cat}タブで詳細を見る →</button>
+      </div></div>`;
+    }
+  }
+
   // 出金（楽天銀行からの引き出し）
   const withdrawals = (md.withdrawals || [])
     .filter(w => w.cat === cat)
@@ -5065,6 +5271,8 @@ function renderSettings() {
              onfocus="unfmtInput(this)"
              onblur="fmtInput(this);saveAdj('${cat}',this.value)">
     </div>`).join('');
+  // breakdown items
+  BREAKDOWN_CATS.forEach(cat => renderBreakdownSettings(cat));
   // recurring expense
   renderRecList();
 }
@@ -6054,6 +6262,7 @@ function resetForm() {
   document.getElementById('cancel-btn').style.display = 'none';
   document.getElementById('delete-btn').style.display = 'none';
   refreshPayTypeOptions();
+  refreshBreakdownSelect();
 }
 
 function openEdit(id) {
@@ -6080,12 +6289,32 @@ function openEdit(id) {
   document.getElementById('delete-btn').style.display = '';
   document.getElementById('hdr-title').textContent = '支出を編集';
   refreshPayTypeOptions();
+  refreshBreakdownSelect(e.breakdown||'');
   switchScreen('add');
 }
 
 function onPayTypeChange() {
   // 支払元予算は onAmountInput() が支出額から再計算（NO_ROUNDUP_CATSなら支出額と同額）
   onAmountInput();
+  refreshBreakdownSelect();
+}
+
+// 内訳セレクトの表示/選択肢を更新。特別費・敵３のときのみ表示
+function refreshBreakdownSelect(selectedValue) {
+  const wrap = document.getElementById('f-breakdown-wrap');
+  const sel  = document.getElementById('f-breakdown');
+  if (!wrap || !sel) return;
+  const payType = document.getElementById('f-pay').value;
+  if (!BREAKDOWN_CATS.includes(payType)) {
+    wrap.style.display = 'none';
+    sel.value = '';
+    return;
+  }
+  wrap.style.display = '';
+  const items = (D.settings.breakdowns && D.settings.breakdowns[payType]) || [];
+  sel.innerHTML = '<option value="">未分類</option>' +
+    items.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if (selectedValue !== undefined) sel.value = selectedValue;
 }
 
 // 支払種別プルダウンの各オプションに当月の予算残高を併記
@@ -6135,11 +6364,16 @@ function submitExpense() {
   const md = mdata(mk);
   const nmType = document.getElementById('f-nm-type').value||null;
   const nmAmt = nmType ? (parseFloat(document.getElementById('f-nm-amt').value)||null) : null;
+  const payTypeVal = document.getElementById('f-pay').value;
+  const breakdownVal = BREAKDOWN_CATS.includes(payTypeVal)
+    ? (document.getElementById('f-breakdown').value || '')
+    : '';
   const expObj = {
     date, name, amount,
-    payType: document.getElementById('f-pay').value,
+    payType: payTypeVal,
+    breakdown: breakdownVal,
     sat: selSatVal,
-    budgetAlloc: (() => { const v = document.getElementById('transfer-disp').value; return v !== '' ? parseFloat(v)||0 : calcBudgetAlloc(amount, document.getElementById('f-pay').value); })(),
+    budgetAlloc: (() => { const v = document.getElementById('transfer-disp').value; return v !== '' ? parseFloat(v)||0 : calcBudgetAlloc(amount, payTypeVal); })(),
     transferAmt: parseFloat(document.getElementById('f-transfer-amt').value)||0,
     noCc: document.getElementById('f-no-cc').checked,
     nmType, nmAmt,
@@ -6851,6 +7085,7 @@ document.getElementById('rec-anl-modal').addEventListener('click', e => {
 // ═══════════════════════════════════════════════════
 migratePaymentGroups();
 migrateNmAdj();
+initBreakdowns();
 initExpenseCats();
 generateRecurring(curMonth);
 generateRecurringTeki3(curMonth);
