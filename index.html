@@ -890,12 +890,13 @@
       #scr-summary .month-nav,
       #scr-list .month-nav { display: none; }
 
-      /* Content width constraints */
-      #anl-body { padding: 0 32px 24px; }
-      .form-wrap { max-width: 640px; margin: 0 auto; }
-      #expense-list { max-width: 900px; margin: 0 auto; }
-      #settings-body { max-width: 700px; margin: 0 auto; }
-      #summary-body { max-width: 800px; margin: 0 auto; }
+      /* Content width constraints - デスクトップでもモバイル同等の幅に固定 */
+      .screen.active { max-width: 500px; margin: 0 auto; width: 100%; }
+      .form-wrap { max-width: 500px; margin: 0 auto; }
+      #expense-list { max-width: 500px; margin: 0 auto; }
+      #anl-body,
+      #tokubetsu-body,
+      #teki3-body { padding: 0 16px 24px; max-width: 500px; margin: 0 auto; }
 
       /* Analytics tiles: 2-up row on desktop */
       .kpi-tile-stats { gap: 20px; }
@@ -3464,6 +3465,28 @@ function saveOtherAdjFromTab(cat, val) {
   if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
 }
 
+// 未分類から選択バケツへ金額を振り分け
+// （md.adj[cat] を amt 減らし、bucketAdj[cat][bdName] を amt 増やす）
+function allocateFromUnalloc(cat, amtStr, bdName) {
+  const amt = parseYen(amtStr);
+  if (!bdName) { alert('振り分け先バケツを選択してください'); return; }
+  if (!amt || amt <= 0) { alert('振り分け金額を入力してください'); return; }
+  const md = mdata(curMonth);
+  if (!md.adj) md.adj = {};
+  md.adj[cat] = (md.adj[cat] || 0) - amt;
+  setBucketAdj(curMonth, cat, bdName, getBucketAdj(curMonth, cat, bdName) + amt);
+  // setBucketAdj が save() 済み
+  if (curScreen === 'tokubetsu' || curScreen === 'teki3') renderScreen();
+}
+
+// 未分類全額を選択バケツへ振り分け
+function allocateAllFromUnalloc(cat, bdName) {
+  if (!bdName) { alert('振り分け先バケツを選択してください'); return; }
+  const uncBal = unallocatedBreakdownBalance(curMonth, cat);
+  if (uncBal === 0) { alert('未分類残高がゼロです'); return; }
+  allocateFromUnalloc(cat, String(uncBal), bdName);
+}
+
 // 特別費/敵３タブの描画（バケツ名の追加・削除と残高表示のみ）
 function renderBreakdownScreen(cat) {
   const monthLabelEl = document.getElementById(cat === '特別費' ? 'tokubetsu-month' : 'teki3-month');
@@ -3562,6 +3585,10 @@ function renderBreakdownScreen(cat) {
       <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
     </div>`;
   }).join('');
+  // 振り分け先バケツの選択肢
+  const allocSelectId = `alloc-to-${cat}`;
+  const allocAmtId = `alloc-amt-${cat}`;
+  const bucketOpts = items.map(it => `<option value="${esQ(it.name)}">${esc(it.name)}</option>`).join('');
   html += `
     <div class="card" style="margin-bottom:8px;background:var(--fill);">
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
@@ -3569,6 +3596,19 @@ function renderBreakdownScreen(cat) {
         <span style="font-weight:700;font-size:18px;color:${uncColor};">${yenSigned(uncBal)}</span>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-top:2px;">親カテゴリ残高 − バケツ合計（未割当ぶん）</div>
+      ${items.length ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:0.5px dashed var(--sep);">
+          <div style="font-size:11px;color:var(--sub);margin-bottom:6px;">→ バケツに振り分け</div>
+          <div style="display:flex;gap:6px;">
+            <select id="${allocSelectId}" style="flex:1;font-size:13px;padding:6px 8px;background:var(--card);color:var(--text);border:1px solid var(--sep);border-radius:6px;">
+              ${bucketOpts}
+            </select>
+            <input class="fi" type="text" inputmode="numeric" id="${allocAmtId}" placeholder="金額" style="width:100px;font-size:13px;padding:6px 8px;"
+              onfocus="unfmtInput(this)" onblur="fmtInput(this)">
+            <button onclick="allocateFromUnalloc('${cat}',document.getElementById('${allocAmtId}').value,document.getElementById('${allocSelectId}').value)" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">移動</button>
+          </div>
+          <button onclick="allocateAllFromUnalloc('${cat}',document.getElementById('${allocSelectId}').value)" style="width:100%;background:var(--card);border:1px solid var(--sep);color:var(--primary);padding:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;border-radius:6px;margin-top:6px;">残高全額を選択バケツへ移動</button>
+        </div>` : ''}
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <label style="font-size:11px;color:var(--sub);flex-shrink:0;">その他調整</label>
         <input class="fi" type="text" inputmode="text" value="${fmtYenVal(otherAdj)}"
