@@ -5144,6 +5144,33 @@ function openBudgetDetail(cat) {
   }
   html += '</div>';
 
+  // 配当金の入金明細（当月）
+  if (cat === '配当金') {
+    const incomes = (md.incomes || [])
+      .filter(x => x.category === '配当金')
+      .sort((a,b) => a.date.localeCompare(b.date));
+    if (incomes.length) {
+      const incomeTotal = incomes.reduce((s,x) => s + (x.amount||0), 0);
+      html += `<div class="detail-block">
+        <div class="detail-block-title">当月の入金</div>
+        <div style="display:flex;justify-content:space-between;padding:0 0 10px;border-bottom:0.5px solid var(--sep);margin-bottom:4px;">
+          <span style="font-size:13px;color:var(--sub);">合計入金</span>
+          <span style="font-weight:700;font-size:15px;color:var(--success);">+${yen(incomeTotal)}</span>
+        </div>`;
+      incomes.forEach(x => {
+        const memo = x.memo ? ` · ${esc(x.memo)}` : '';
+        html += `<div class="detail-exp-row" onclick="closeDetailModal();openIncomeModal('${x.id}')" style="cursor:pointer;">
+          <div>
+            <div style="font-size:14px;font-weight:500;">💰 ${esc(x.category)}${memo}</div>
+            <div style="font-size:12px;color:var(--sub);">${x.date}</div>
+          </div>
+          <div style="font-size:15px;font-weight:600;color:var(--success);">+${yen(x.amount)}</div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+  }
+
   // 内訳バケツ残高（特別費・敵３のみ）
   if (BREAKDOWN_CATS.includes(cat)) {
     const items = getBreakdownItems(cat);
