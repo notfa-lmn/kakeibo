@@ -5433,6 +5433,17 @@ function toggleUnfundedSection() {
 // ═══════════════════════════════════════════════════
 //  RENDER — SETTINGS
 // ═══════════════════════════════════════════════════
+// 設定画面の折りたたみ状態（section='carryover' or 'adj'）
+function isSetCollapsed(section, cat) {
+  // 既定=展開。折りたたんだ状態のみlocalStorageに保存
+  return localStorage.getItem(`setCollapse_${section}_${cat}`) === '1';
+}
+function toggleSetCollapse(section, cat) {
+  const key = `setCollapse_${section}_${cat}`;
+  localStorage.setItem(key, isSetCollapsed(section, cat) ? '0' : '1');
+  if (curScreen === 'settings') renderScreen();
+}
+
 function renderSettings() {
   document.getElementById('settings-month-label').textContent = monthLabel(curMonth);
   updateAuthUI();       // アカウント情報を最新表示
@@ -5451,13 +5462,51 @@ function renderSettings() {
   const prevKey = prevMk(curMonth);
   const carryoverRow = cat => {
     const prevBal = D.months[prevKey] ? displayBudgetBalance(prevKey, cat) : 0;
+    if (BREAKDOWN_CATS.includes(cat)) {
+      // 特別費・敵３: 親（前月残高）+ 折りたたみ可能なバケツ別繰越
+      const collapsed = isSetCollapsed('carryover', cat);
+      const arrow = collapsed ? '▶' : '▼';
+      const buckets = getBreakdownItems(cat);
+      let block = `
+        <div class="set-row" style="cursor:pointer;" onclick="toggleSetCollapse('carryover','${cat}')">
+          <span class="set-label" style="font-weight:600;">${arrow} ${esc(cat)}</span>
+          <input class="set-input" type="text" readonly
+                 value="${fmtYenVal(prevBal)}"
+                 style="color:var(--sub);cursor:pointer;background:transparent;pointer-events:none;">
+        </div>`;
+      if (!collapsed) {
+        let bucketSumPrev = 0;
+        buckets.forEach(bd => {
+          const bdPrevBal = D.months[prevKey] ? bucketDisplayBalance(prevKey, cat, bd.name) : 0;
+          bucketSumPrev += bdPrevBal;
+          block += `
+            <div class="set-row" style="padding-left:24px;">
+              <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
+              <input class="set-input" type="text" readonly
+                     value="${fmtYenVal(bdPrevBal)}"
+                     style="color:var(--sub);cursor:default;background:transparent;">
+            </div>`;
+        });
+        const prevOther = prevBal - bucketSumPrev;
+        if (prevOther !== 0 || buckets.length === 0) {
+          block += `
+            <div class="set-row" style="padding-left:24px;">
+              <span class="set-label" style="font-size:13px;color:var(--sub);">└ その他</span>
+              <input class="set-input" type="text" readonly
+                     value="${fmtYenVal(prevOther)}"
+                     style="color:var(--sub);cursor:default;background:transparent;">
+            </div>`;
+        }
+      }
+      return block;
+    }
     return `
-    <div class="set-row">
-      <span class="set-label">${esc(cat)}</span>
-      <input class="set-input" type="text" readonly
-             value="${fmtYenVal(prevBal)}"
-             style="color:var(--sub);cursor:default;">
-    </div>`;
+      <div class="set-row">
+        <span class="set-label">${esc(cat)}</span>
+        <input class="set-input" type="text" readonly
+               value="${fmtYenVal(prevBal)}"
+               style="color:var(--sub);cursor:default;">
+      </div>`;
   };
   document.getElementById('budget-settings-carryover').innerHTML = carryoverCats.map(carryoverRow).join('');
   document.getElementById('budget-settings-monthly').innerHTML   = monthlyCats.map(budgetRow).join('');
@@ -5466,45 +5515,47 @@ function renderSettings() {
   const esQ = s => esc(s).replace(/'/g, "&#39;");
   document.getElementById('adj-settings').innerHTML = CATS.map(cat => {
     if (BREAKDOWN_CATS.includes(cat)) {
-      // 特別費・敵３: 親（自動サマ、読取専用）+ 子バケツ（編集可）+ その他調整（バケツ外）
+      // 特別費・敵３: 親（自動サマ、折りたたみ可）+ 子バケツ + その他調整
       const otherAdj = (md.adj || {})[cat] || 0;
       const parentSum = otherAdj + sumBucketAdj(curMonth, cat);
       const buckets = getBreakdownItems(cat);
+      const collapsed = isSetCollapsed('adj', cat);
+      const arrow = collapsed ? '▶' : '▼';
       let block = `
-        <div class="set-row" style="border-bottom:0.5px solid var(--sep);">
-          <span class="set-label" style="font-weight:700;">${esc(cat)}</span>
+        <div class="set-row" style="border-bottom:0.5px solid var(--sep);cursor:pointer;" onclick="toggleSetCollapse('adj','${cat}')">
+          <span class="set-label" style="font-weight:700;">${arrow} ${esc(cat)}</span>
           <input class="set-input" type="text" readonly value="${fmtYenVal(parentSum)}"
-                 style="color:var(--sub);cursor:default;background:transparent;text-align:right;">
+                 style="color:var(--sub);cursor:pointer;background:transparent;text-align:right;pointer-events:none;">
         </div>`;
-      buckets.forEach(bd => {
-        const val = getBucketAdj(curMonth, cat, bd.name);
-        const nameEs = esQ(bd.name);
+      if (!collapsed) {
+        buckets.forEach(bd => {
+          const val = getBucketAdj(curMonth, cat, bd.name);
+          const nameEs = esQ(bd.name);
+          block += `
+            <div class="set-row" style="padding-left:24px;">
+              <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
+              <input class="set-input" type="text" inputmode="text"
+                     value="${fmtYenVal(val)}"
+                     onfocus="unfmtInput(this)"
+                     onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
+            </div>`;
+        });
         block += `
           <div class="set-row" style="padding-left:24px;">
-            <span class="set-label" style="font-size:13px;color:var(--sub);">└ ${esc(bd.name)}</span>
+            <span class="set-label" style="font-size:13px;color:var(--sub);">└ その他</span>
             <input class="set-input" type="text" inputmode="text"
-                   value="${fmtYenVal(val)}"
+                   value="${fmtYenVal(otherAdj)}"
                    onfocus="unfmtInput(this)"
-                   onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
+                   onblur="fmtInput(this);saveAdj('${cat}',this.value)">
           </div>`;
-      });
-      // その他調整（バケツに紐づかない親カテゴリ調整）— 過去データの継続用途で常時表示
-      block += `
-        <div class="set-row" style="padding-left:24px;">
-          <span class="set-label" style="font-size:13px;color:var(--sub);">└ その他</span>
-          <input class="set-input" type="text" inputmode="text"
-                 value="${fmtYenVal(otherAdj)}"
-                 onfocus="unfmtInput(this)"
-                 onblur="fmtInput(this);saveAdj('${cat}',this.value)">
-        </div>`;
-      if (!buckets.length) {
-        block += `<div style="padding:6px 12px 10px;font-size:11px;color:var(--sub);">
-          ${esc(cat)}タブでバケツを追加すると、ここに各バケツの調整入力欄が追加されます
-        </div>`;
+        if (!buckets.length) {
+          block += `<div style="padding:6px 12px 10px;font-size:11px;color:var(--sub);">
+            ${esc(cat)}タブでバケツを追加すると、ここに各バケツの調整入力欄が追加されます
+          </div>`;
+        }
       }
       return block;
     }
-    // その他カテゴリ: 通常入力
     return `
       <div class="set-row">
         <span class="set-label">${esc(cat)}</span>
