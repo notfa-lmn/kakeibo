@@ -5540,14 +5540,6 @@ function renderSettings() {
                      onblur="fmtInput(this);saveBucketAdjInput('${cat}','${nameEs}',this.value)">
             </div>`;
         });
-        block += `
-          <div class="set-row" style="padding-left:24px;">
-            <span class="set-label" style="font-size:13px;color:var(--sub);">└ その他</span>
-            <input class="set-input" type="text" inputmode="text"
-                   value="${fmtYenVal(otherAdj)}"
-                   onfocus="unfmtInput(this)"
-                   onblur="fmtInput(this);saveAdj('${cat}',this.value)">
-          </div>`;
         if (!buckets.length) {
           block += `<div style="padding:6px 12px 10px;font-size:11px;color:var(--sub);">
             ${esc(cat)}タブでバケツを追加すると、ここに各バケツの調整入力欄が追加されます
