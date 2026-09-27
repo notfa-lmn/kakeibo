@@ -1719,12 +1719,19 @@
     <div class="form-wrap" style="padding-top:0;">
       <div class="fg">
         <label>日付</label>
-        <input class="fi" type="date" id="wd-date">
+        <input class="fi" type="date" id="wd-date" onchange="refreshWdBreakdownSelect()">
       </div>
       <div class="fg">
         <label>出金元（予算カテゴリ）</label>
-        <select class="fs" id="wd-category">
+        <select class="fs" id="wd-category" onchange="refreshWdBreakdownSelect()">
           <option value="">選択</option>
+        </select>
+      </div>
+      <!-- 出金元バケツ（特別費/敵３のみ） -->
+      <div class="fg" id="wd-breakdown-wrap" style="display:none;">
+        <label>出金元バケツ</label>
+        <select class="fs" id="wd-breakdown">
+          <option value="">未分類</option>
         </select>
       </div>
       <div class="fg">
@@ -3299,13 +3306,37 @@ function openWithdrawalModal(id) {
     document.getElementById('wd-amount').value = wd.amount;
     document.getElementById('wd-memo').value = wd.memo||'';
     document.getElementById('wd-del-btn').style.display = '';
+    refreshWdBreakdownSelect(wd.breakdown||'');
   } else {
     document.getElementById('withdrawal-modal-title').textContent = '出金を記録';
     document.getElementById('wd-date').value = todayStr();
     document.getElementById('wd-amount').value = '';
     document.getElementById('wd-memo').value = '';
+    refreshWdBreakdownSelect('');
   }
   document.getElementById('withdrawal-modal').classList.add('open');
+}
+
+// 出金元バケツのセレクトを更新（特別費・敵３のときのみ表示、各バケツ残高を併記）
+function refreshWdBreakdownSelect(selectedValue) {
+  const wrap = document.getElementById('wd-breakdown-wrap');
+  const sel  = document.getElementById('wd-breakdown');
+  if (!wrap || !sel) return;
+  const cat = document.getElementById('wd-category').value;
+  if (!BREAKDOWN_CATS.includes(cat)) {
+    wrap.style.display = 'none';
+    sel.value = '';
+    return;
+  }
+  const keep = selectedValue !== undefined ? selectedValue : sel.value;
+  wrap.style.display = '';
+  const mk = (document.getElementById('wd-date').value || '').slice(0,7) || curMonth;
+  sel.innerHTML = `<option value="">未分類（残: ${yenSigned(unallocatedBreakdownBalance(mk, cat))}）</option>` +
+    getBreakdownItems(cat).map(it =>
+      `<option value="${esc(it.name)}">${esc(it.name)}（残: ${yenSigned(bucketDisplayBalance(mk, cat, it.name))}）</option>`
+    ).join('');
+  sel.value = keep;
+  if (sel.value !== keep) sel.value = '';
 }
 
 function closeWithdrawalModal() {
@@ -3319,10 +3350,23 @@ function submitWithdrawal() {
   if (!date || !cat || amount <= 0) { alert('日付・出金元カテゴリ・金額を入力してください'); return; }
   const mk  = date.slice(0,7);
   const md  = mdata(mk);
-  const obj = { date, cat, amount, memo: document.getElementById('wd-memo').value.trim() };
+  const breakdown = BREAKDOWN_CATS.includes(cat) ? (document.getElementById('wd-breakdown').value || '') : '';
+  const obj = { date, cat, breakdown, amount, memo: document.getElementById('wd-memo').value.trim() };
   if (editWithdrawalId) {
-    const idx = md.withdrawals.findIndex(x => x.id === editWithdrawalId);
-    if (idx !== -1) md.withdrawals[idx] = { ...md.withdrawals[idx], ...obj };
+    // 日付の月を変えた編集にも対応（全月から検索し、旧月から新月へ移動）
+    let srcMd = null, idx = -1;
+    for (const k of Object.keys(D.months)) {
+      idx = (D.months[k].withdrawals||[]).findIndex(x => x.id === editWithdrawalId);
+      if (idx !== -1) { srcMd = D.months[k]; break; }
+    }
+    if (!srcMd) { alert('編集対象の出金が見つかりませんでした'); return; }
+    const updated = { ...srcMd.withdrawals[idx], ...obj };
+    if (srcMd === md) {
+      md.withdrawals[idx] = updated;
+    } else {
+      srcMd.withdrawals.splice(idx, 1);
+      md.withdrawals.push(updated);
+    }
   } else {
     md.withdrawals.push({ id: uid(), ...obj });
   }
@@ -3390,13 +3434,21 @@ function currentMonthSpendForBreakdown(mk, cat, bdName) {
   return total;
 }
 
-// バケツ残高（当月支出控除後）= 前月バケツ残高 + 当月調整 − 当月支出
+// バケツの当月出金合計（楽天銀行からの引き出し）
+function currentMonthWithdrawalForBreakdown(mk, cat, bdName) {
+  return (mdata(mk).withdrawals || [])
+    .filter(w => w.cat === cat && (w.breakdown || '') === bdName)
+    .reduce((s, w) => s + (w.amount || 0), 0);
+}
+
+// バケツ残高（当月支出・出金控除後）= 前月バケツ残高 + 当月調整 − 当月支出 − 当月出金
 function bucketDisplayBalance(mk, cat, bdName) {
   const prevKey = prevMk(mk);
   const prevDisp = D.months[prevKey] ? bucketDisplayBalance(prevKey, cat, bdName) : 0;
   const curAdj = getBucketAdj(mk, cat, bdName);
   const curSpend = currentMonthSpendForBreakdown(mk, cat, bdName);
-  return prevDisp + curAdj - curSpend;
+  const curWithdraw = currentMonthWithdrawalForBreakdown(mk, cat, bdName);
+  return prevDisp + curAdj - curSpend - curWithdraw;
 }
 
 // 未分類（内訳なし）残高 = 親カテゴリ残高 − バケツ合計残高
@@ -3433,9 +3485,12 @@ function deleteBreakdownItem(cat, name) {
     (m.expenses || []).forEach(e => {
       if (e.payType === cat && e.breakdown === name) usedCount++;
     });
+    (m.withdrawals || []).forEach(w => {
+      if (w.cat === cat && w.breakdown === name) usedCount++;
+    });
   });
   const msg = usedCount > 0
-    ? `「${name}」は ${usedCount} 件の支出で使用されています。削除しても既存の支出は残り、内訳は「未分類」扱いになります。バケツを削除しますか？`
+    ? `「${name}」は ${usedCount} 件の支出・出金で使用されています。削除しても既存の記録は残り、「未分類」扱いになります。バケツを削除しますか？`
     : `バケツ「${name}」を削除しますか？各月に登録した当月調整額も一緒に消えます。`;
   if (!confirm(msg)) return;
   D.settings.breakdowns[cat] = D.settings.breakdowns[cat].filter(x =>
@@ -3552,6 +3607,13 @@ function renderBreakdownScreen(cat) {
         <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
       </div>`;
     }).join('');
+    const bdWithdrawals = (md.withdrawals || []).filter(w => w.cat === cat && (w.breakdown||'') === it.name)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    const monthWithdraw = bdWithdrawals.reduce((s,w) => s + (w.amount||0), 0);
+    const wdRows = bdWithdrawals.map(w => `
+      <div onclick="openWithdrawalModal('${w.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
+        <span>└ ${esc(w.date.slice(5))} 🏦 出金${w.memo ? ` ${esc(w.memo)}` : ''}</span><span>-${yen(w.amount)}</span>
+      </div>`).join('');
     html += `
       <div class="card" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;">
@@ -3567,6 +3629,8 @@ function renderBreakdownScreen(cat) {
         </div>
         ${monthSpend?`<div style="font-size:11px;color:var(--danger);margin-top:6px;">当月支出: -${yen(monthSpend)}（${expenses.length}件）</div>`:''}
         ${expRows}
+        ${monthWithdraw?`<div style="font-size:11px;color:var(--danger);margin-top:6px;">当月出金: -${yen(monthWithdraw)}（${bdWithdrawals.length}件）</div>`:''}
+        ${wdRows}
         <div style="text-align:right;margin-top:6px;">
           <button onclick="deleteBreakdownItem('${cat}','${nameEs}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:2px 6px;">🗑 削除</button>
         </div>
@@ -3584,7 +3648,12 @@ function renderBreakdownScreen(cat) {
     return `<div onclick="openEdit('${e.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
       <span>└ ${esc(e.date.slice(5))} ${esc(e.name)}</span><span>-${yen(alloc)}</span>
     </div>`;
-  }).join('');
+  }).join('') + (md.withdrawals || [])
+    .filter(w => w.cat === cat && !(w.breakdown||''))
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .map(w => `<div onclick="openWithdrawalModal('${w.id}')" style="display:flex;justify-content:space-between;padding:6px 8px;font-size:12px;color:var(--sub);cursor:pointer;border-radius:6px;">
+      <span>└ ${esc(w.date.slice(5))} 🏦 出金${w.memo ? ` ${esc(w.memo)}` : ''}</span><span>-${yen(w.amount)}</span>
+    </div>`).join('');
   // 振り分け先バケツの選択肢
   const allocSelectId = `alloc-to-${cat}`;
   const allocAmtId = `alloc-amt-${cat}`;
@@ -5178,9 +5247,11 @@ function openBudgetDetail(cat) {
       name: it.name,
       balance: bucketDisplayBalance(curMonth, cat, it.name),
       monthSpend: currentMonthSpendForBreakdown(curMonth, cat, it.name)
+                + currentMonthWithdrawalForBreakdown(curMonth, cat, it.name)
     }));
     const uncBal = unallocatedBreakdownBalance(curMonth, cat);
-    const uncSpend = currentMonthSpendForBreakdown(curMonth, cat, '');
+    const uncSpend = currentMonthSpendForBreakdown(curMonth, cat, '')
+                   + currentMonthWithdrawalForBreakdown(curMonth, cat, '');
     if (uncBal !== 0 || uncSpend !== 0) {
       rows.push({ name: '未分類', balance: uncBal, monthSpend: uncSpend });
     }
@@ -5220,7 +5291,7 @@ function openBudgetDetail(cat) {
     withdrawals.forEach(w => {
       html += `<div class="detail-exp-row" onclick="closeDetailModal();openWithdrawalModal('${w.id}')" style="cursor:pointer;">
         <div>
-          <div style="font-size:14px;font-weight:500;">🏦 出金${w.memo ? ` · ${esc(w.memo)}` : ''}</div>
+          <div style="font-size:14px;font-weight:500;">🏦 出金${w.breakdown ? ` › ${esc(w.breakdown)}` : ''}${w.memo ? ` · ${esc(w.memo)}` : ''}</div>
           <div style="font-size:12px;color:var(--sub);">${w.date}</div>
         </div>
         <div style="font-size:15px;font-weight:600;color:var(--danger);">-${yen(w.amount)}</div>
@@ -5378,7 +5449,7 @@ function renderList() {
           <div class="income-row" onclick="openWithdrawalModal('${x.id}')">
             <div class="inc-icon" style="color:var(--danger);">🏦</div>
             <div class="inc-info">
-              <div class="inc-name" style="color:var(--danger);">出金 / ${esc(x.cat)}</div>
+              <div class="inc-name" style="color:var(--danger);">出金 / ${esc(x.cat)}${x.breakdown ? ` › ${esc(x.breakdown)}` : ''}</div>
               <div class="inc-meta"><span class="tbadge" style="background:var(--fill);color:var(--sub);">出金</span>${x.memo ? ` ${esc(x.memo)}` : ''}</div>
             </div>
             <div class="inc-amount" style="color:var(--danger);">-${yen(x.amount)}</div>
