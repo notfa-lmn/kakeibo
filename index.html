@@ -986,11 +986,11 @@
       <div class="bank-card-detail" id="bank-detail"></div>
     </div>
     <div class="credit-row">
-      <span class="credit-label">前月クレジット支払額</span>
+      <span class="credit-label">前月クレジット支払額<span id="prev-credit-mode" style="display:block;font-size:10px;opacity:0.75;margin-top:2px;"></span></span>
       <input class="credit-input" type="text" inputmode="numeric" id="prev-credit-input"
              placeholder="¥0"
              onfocus="unfmtInput(this)"
-             onblur="fmtInput(this);savePrevCredit(this.value)">
+             onblur="savePrevCredit(this.value);fmtInput(this)">
     </div>
   </div>
 
@@ -2617,7 +2617,7 @@ function bankBalance(mk) {
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(mk, cat), 0);
   // CC・非CC問わず「振込金額」入力ぶんは楽天銀行残高に加算
   const transferSum = (md.expenses||[]).reduce((s,e) => s + (e.transferAmt||0), 0);
-  const prevCredit = md.prevCredit || 0;
+  const prevCredit = effectivePrevCredit(mk);
   // 会社売上は累計残高（前月繰越＋当月純増）を反映
   const companyBal = companyBalance(mk);
   return budgetSum + transferSum + prevCredit + companyBal;
@@ -2631,6 +2631,19 @@ function creditTotal(mk) {
   return (mdata(mk).expenses||[])
     .filter(e => !e.noCc)
     .reduce((s,e) => s + (e.amount||0), 0);
+}
+
+// 前月クレジット支払額：手入力があればその値、なければ前月のクレジット計を自動採用
+function isPrevCreditManual(mk) {
+  const md = D.months[mk];
+  if (!md) return false;
+  if (md.prevCreditManual !== undefined) return !!md.prevCreditManual;
+  return (md.prevCredit || 0) !== 0; // 旧データ：0以外は手入力とみなす
+}
+function effectivePrevCredit(mk) {
+  if (isPrevCreditManual(mk)) return D.months[mk].prevCredit || 0;
+  const prev = D.months[prevMk(mk)]; // mdata() だと空の月を作ってしまうため直接参照
+  return prev ? (prev.expenses||[]).filter(e => !e.noCc).reduce((s,e) => s + (e.amount||0), 0) : 0;
 }
 function noCcTotal(mk) {
   return (mdata(mk).expenses||[])
@@ -5032,7 +5045,7 @@ function openBankDetail() {
   const md = mdata(curMonth);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
-  const prevCredit = md.prevCredit || 0;
+  const prevCredit = effectivePrevCredit(curMonth);
   const companyBal = companyBalance(curMonth);
   const total = budgetSum + transferSum + prevCredit + companyBal;
 
@@ -5307,7 +5320,7 @@ function refreshBankDisplay() {
   const md = mdata(curMonth);
   const budgetSum = CATS.reduce((s, cat) => s + budgetBalance(curMonth, cat), 0);
   const transferSum = (md.expenses||[]).reduce((s,e)=>s+(e.transferAmt||0),0);
-  const prevCredit = md.prevCredit || 0;
+  const prevCredit = effectivePrevCredit(curMonth);
   const companyBal = companyBalance(curMonth);
   const total = budgetSum + transferSum + prevCredit + companyBal;
   document.getElementById('bank-val').textContent = yenSigned(total);
@@ -5317,6 +5330,12 @@ function refreshBankDisplay() {
   const pcEl = document.getElementById('prev-credit-input');
   if (document.activeElement !== pcEl) {
     pcEl.value = fmtYenVal(prevCredit);
+  }
+  const modeEl = document.getElementById('prev-credit-mode');
+  if (modeEl) {
+    modeEl.innerHTML = isPrevCreditManual(curMonth)
+      ? '手入力 ・ <a onclick="resetPrevCredit()" style="text-decoration:underline;cursor:pointer;">自動に戻す</a>'
+      : '前月のクレジット計から自動';
   }
 }
 
@@ -5633,8 +5652,21 @@ function renderSettings() {
 }
 
 function savePrevCredit(val) {
+  const raw = String(val || '').trim();
+  if (raw === '') { resetPrevCredit(); return; } // 空欄は自動に戻す
+  const v = parseYen(raw);
+  // 自動値のままフォーカスを外しただけなら手入力扱いにしない
+  if (!isPrevCreditManual(curMonth) && v === effectivePrevCredit(curMonth)) { refreshBankDisplay(); return; }
   const md = mdata(curMonth);
-  md.prevCredit = parseYen(val);
+  md.prevCredit = v;
+  md.prevCreditManual = true;
+  save();
+  refreshBankDisplay();
+}
+function resetPrevCredit() {
+  const md = mdata(curMonth);
+  md.prevCredit = 0;
+  md.prevCreditManual = false;
   save();
   refreshBankDisplay();
 }
