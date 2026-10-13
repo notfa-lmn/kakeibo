@@ -1267,6 +1267,7 @@
           📥 データをインポート（復元）
         </button>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importData(event)">
+        <div id="discarded-backup-area"></div>
         <div id="import-msg" style="font-size:12px; text-align:center; min-height:16px;"></div>
       </div>
     </div>
@@ -2020,6 +2021,7 @@ function startRealtimeSync() {
   _unsubSnapshot = fbDb.collection('users').doc(currentUser.uid)
     .onSnapshot(doc => {
       if (!doc.exists) return;
+      if (doc.metadata && doc.metadata.hasPendingWrites) return; // 自分の書き込み中の通知
       const cloud = doc.data();
       // クラウドデータが空/不正なら適用しない（空データ上書き防止）
       if (!cloud || !cloud.settings || !cloud.months) return;
@@ -2031,17 +2033,12 @@ function startRealtimeSync() {
       );
       if (!cloudHasData) return; // クラウドが空なら無視
       const cloudTs = cloud._savedAt || 0;
-      const localTs = D._savedAt || 0;
-      // 自分のsaveによる通知は無視（タイムスタンプが同じ or 古い）
-      if (cloudTs <= localTs) return;
+      // 自分の保存の通知・同期済みのデータは無視（端末間の時計ずれに左右されないよう大小比較はしない）
+      if (cloudTs === (D._savedAt || 0) || _ownWrites.has(cloudTs) || cloudTs === getSyncBase()) return;
+      // この端末に未送信の変更がある → 黙って上書きせず利用者に選んでもらう
+      if (isSyncDirty()) { resolveSyncConflict(cloud); return; }
       // 別デバイスからの更新を適用
-      D = cloud;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
-      generateRecurring(curMonth);
-      generateRecurringTeki3(curMonth);
-      generateRecurringIncome(curMonth);
-      generateRecurringAnl(curMonth);
-      renderScreen();
+      applyCloudData(cloud);
       showSyncToast('☁️ 他のデバイスのデータを同期しました');
     }, err => {
       console.warn('Realtime sync error:', err);
@@ -2060,6 +2057,74 @@ function showSyncToast(msg) {
   setTimeout(() => t.remove(), 3000);
 }
 
+// ── 同期状態（端末ごとに localStorage で管理）─────────────
+//  base : この端末が最後にクラウドと一致していた時点のクラウド _savedAt
+//  dirty: この端末にクラウド未反映の手動変更があるか
+const SYNC_BASE_KEY  = 'kakeibo_sync_base';
+const SYNC_DIRTY_KEY = 'kakeibo_sync_dirty';
+const DISCARDED_KEY  = 'kakeibo_discarded_backup';
+const _ownWrites = new Set(); // この端末が書き込んだ _savedAt（自分の保存通知を見分ける）
+function getSyncBase() {
+  try { const v = localStorage.getItem(SYNC_BASE_KEY); return v === null ? null : Number(v); } catch(e) { return null; }
+}
+function setSyncBase(ts) { try { localStorage.setItem(SYNC_BASE_KEY, String(ts || 0)); } catch(e){} }
+function isSyncDirty() { try { return localStorage.getItem(SYNC_DIRTY_KEY) === '1'; } catch(e) { return false; } }
+function setSyncDirty(v) { try { localStorage.setItem(SYNC_DIRTY_KEY, v ? '1' : '0'); } catch(e){} }
+
+// クラウドのデータをこの端末に適用
+function applyCloudData(cloud) {
+  D = cloud;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+  setSyncBase(cloud._savedAt || 0);
+  setSyncDirty(false);
+  _pendingCloudSave = false;
+  runMigrations();
+  generateRecurring(curMonth);
+  generateRecurringTeki3(curMonth);
+  generateRecurringIncome(curMonth);
+  generateRecurringAnl(curMonth);
+  applyNmAdj(curMonth);
+  updateLastSyncLabel();
+  renderScreen();
+}
+
+// 確認ダイアログ用のデータ概要
+function dataSummary(d) {
+  let n = 0, latest = '';
+  Object.values((d && d.months) || {}).forEach(m => (m.expenses || []).forEach(e => {
+    n++; if (e.date && e.date > latest) latest = e.date;
+  }));
+  const ts = d && d._savedAt ? new Date(d._savedAt).toLocaleString('ja-JP') : '不明';
+  return `最終保存: ${ts}\n支出: ${n}件（最新の支出日: ${latest ? latest.replace(/-/g,'/') : 'なし'}）`;
+}
+
+// 破棄する側のデータをこの端末に一時保存（設定画面からエクスポート可能）
+function keepDiscardedBackup(data, label) {
+  try { localStorage.setItem(DISCARDED_KEY, JSON.stringify({ at: Date.now(), label, data })); }
+  catch(e) { console.warn('Discarded backup failed:', e); }
+}
+
+// クラウドとこの端末の両方に変更がある（または同期履歴がない）ときは利用者に選んでもらう
+async function resolveSyncConflict(cloud) {
+  const useCloud = confirm(
+    'クラウドとこの端末で家計簿のデータが食い違っています。\n\n' +
+    '【クラウド】\n' + dataSummary(cloud) + '\n\n' +
+    '【この端末】\n' + dataSummary(D) + '\n\n' +
+    'OK：クラウドのデータを使う（この端末の内容は破棄）\n' +
+    'キャンセル：この端末のデータでクラウドを上書き\n\n' +
+    '※破棄した側のデータはこの端末に一時保存され、設定画面からエクスポートできます'
+  );
+  if (useCloud) {
+    keepDiscardedBackup(D, 'この端末');
+    applyCloudData(cloud);
+    showSyncToast('☁️ クラウドのデータを適用しました');
+  } else {
+    keepDiscardedBackup(cloud, 'クラウド');
+    save(); // _savedAt を更新してクラウドを上書き（他の端末にも反映される）
+    renderScreen();
+  }
+}
+
 let _pendingCloudSave = false; // 保存失敗データが未sync状態か
 
 async function saveToCloud() {
@@ -2076,8 +2141,11 @@ async function saveToCloud() {
     return;
   }
   try {
+    _ownWrites.add(payload._savedAt || 0);
     await fbDb.collection('users').doc(currentUser.uid).set(payload);
     _pendingCloudSave = false;
+    setSyncBase(payload._savedAt || 0);
+    if ((D._savedAt || 0) === (payload._savedAt || 0)) setSyncDirty(false);
     updateLastSyncLabel(); // 保存成功時に最終同期時刻を更新
     hideSaveErrorBanner();
   } catch(e) {
@@ -2137,42 +2205,29 @@ async function loadFromCloud() {
   if (!currentUser || !fbDb) return;
   try {
     const doc = await fbDb.collection('users').doc(currentUser.uid).get();
-    if (doc.exists) {
-      const cloud = doc.data();
-      if (cloud && cloud.settings && cloud.months) {
-        const localTs = D._savedAt || 0;
-        const cloudTs = cloud._savedAt || 0;
-
-        // クラウドを優先すべきケース：
-        //   1. クラウドの方が新しい
-        //   2. クラウドとローカルが同タイムスタンプ（初回ロード等）
-        //   3. ローカルが新しくても実データが空（localStorage消去 or 初回起動）
-        const localIsNewer = cloudTs < localTs;
-        if (localIsNewer && hasLocalData()) {
-          // ローカルが新しく、かつ実データあり → クラウドを上書き
-          console.log('Local data is newer, pushing to cloud.');
-          await saveToCloud();
-          renderScreen();
-          return;
-        }
-
-        // クラウドを適用（クラウドが新しい、または同タイムスタンプ、またはローカルが空）
-        D = cloud;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
-        generateRecurring(curMonth);
-        generateRecurringTeki3(curMonth);
-        generateRecurringIncome(curMonth);
-        generateRecurringAnl(curMonth);
-        applyNmAdj(curMonth);
-        updateLastSyncLabel();
-        renderScreen();
-      }
-    } else {
-      // クラウドにドキュメントなし → ローカルデータがあれば作成、なければ何もしない
-      if (hasLocalData()) {
-        await saveToCloud();
-      }
+    if (!doc.exists) {
+      // クラウドにドキュメントなし → ローカルデータがあれば作成
+      if (hasLocalData()) await saveToCloud();
+      return;
     }
+    const cloud = doc.data();
+    if (!cloud || !cloud.settings || !cloud.months) return;
+    const localTs = D._savedAt || 0;
+    const cloudTs = cloud._savedAt || 0;
+    const base  = getSyncBase();
+    const dirty = isSyncDirty();
+
+    // ローカルが空 or 同じデータ → クラウドを適用
+    if (!hasLocalData() || cloudTs === localTs) { applyCloudData(cloud); return; }
+
+    if (base !== null) {
+      // この端末に未送信の変更がない → クラウドが正（この端末のデータは古いキャッシュ）
+      if (!dirty) { applyCloudData(cloud); return; }
+      // クラウドは前回同期から変わっていない → この端末の変更を送る
+      if (cloudTs === base) { await saveToCloud(); renderScreen(); return; }
+    }
+    // 両方で変更あり、または同期履歴がなくデータが異なる → 利用者に選んでもらう
+    await resolveSyncConflict(cloud);
   } catch(e) {
     console.warn('Cloud load failed:', e);
   }
@@ -2388,7 +2443,7 @@ function initBreakdowns() {
       return item;
     });
   });
-  if (migrated) save();
+  if (migrated) saveLocalOnly();
 }
 
 // 旧仕様では applyNmAdj が md.adj[NM_ADJ_CATS] を上書きしていたため
@@ -2399,19 +2454,23 @@ function migrateNmAdj() {
   let changed = false;
   Object.values(D.months).forEach(md => {
     if (!md || md._nmAdjMigrated) return;
+    // 新しいコードで作られた月は最初から nmAdj を持つ → 手動調整を動かさない
+    const isLegacy = !md.nmAdj;
     if (!md.nmAdj) md.nmAdj = {};
     if (!md.adj) md.adj = {};
-    NM_ADJ_CATS.forEach(cat => {
-      const v = md.adj[cat] || 0;
-      if (v !== 0) {
-        md.nmAdj[cat] = v;
-        md.adj[cat] = 0;
-      }
-    });
+    if (isLegacy) {
+      NM_ADJ_CATS.forEach(cat => {
+        const v = md.adj[cat] || 0;
+        if (v !== 0) {
+          md.nmAdj[cat] = v;
+          md.adj[cat] = 0;
+        }
+      });
+    }
     md._nmAdjMigrated = true;
     changed = true;
   });
-  if (changed) save();
+  if (changed) saveLocalOnly();
 }
 
 // 旧「個人支払（支出）」「個人支払（投資）」を「個人支払」へ統合するマイグレーション
@@ -2426,13 +2485,13 @@ function migratePaymentGroups() {
   migrate(D.settings?.recurring);
   migrate(D.settings?.recurringTeki3);
   migrate(D.settings?.recurringAnl);
-  if (changed) save();
+  if (changed) saveLocalOnly();
 }
 
 function initExpenseCats() {
   if (!D.settings.expenseCats) {
     D.settings.expenseCats = JSON.parse(JSON.stringify(DEFAULT_EXPENSE_CATS));
-    save();
+    saveLocalOnly();
   } else {
     // 新カテゴリが未存在なら追加マージ
     let changed = false;
@@ -2442,8 +2501,17 @@ function initExpenseCats() {
         changed = true;
       }
     });
-    if (changed) save();
+    if (changed) saveLocalOnly();
   }
+}
+
+// データ形式のマイグレーション一式（起動時・クラウド適用時・インポート時）
+// ※タイムスタンプを更新しない。古い端末のデータが「新しい」と誤判定されてクラウドを上書きするのを防ぐ
+function runMigrations() {
+  migratePaymentGroups();
+  migrateNmAdj();
+  initBreakdowns();
+  initExpenseCats();
 }
 
 let D = (() => {
@@ -2460,17 +2528,19 @@ function saveLocalOnly() {
 function save() {
   D._savedAt = Date.now();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+  setSyncDirty(true);
   saveToCloud();
 }
 
 async function saveAndWait() {
   D._savedAt = Date.now();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(D)); } catch(e){}
+  setSyncDirty(true);
   await saveToCloud();
 }
 
 function mdata(key) {
-  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, nmAdj:{}, bucketAdj:{}, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
+  if (!D.months[key]) D.months[key] = { prevCredit:0, adj:{}, nmAdj:{}, bucketAdj:{}, _nmAdjMigrated:true, expenses:[], incomes:[], anlEntries:[], recDone:false, recIncDone:false, recAnlDone:false, recTeki3Done:false };
   if (!D.months[key].adj) D.months[key].adj = {};
   if (!D.months[key].nmAdj) D.months[key].nmAdj = {};
   if (!D.months[key].bucketAdj) D.months[key].bucketAdj = {};
@@ -5649,6 +5719,7 @@ function renderSettings() {
   }).join('');
   // recurring expense
   renderRecList();
+  renderDiscardedBackupArea();
 }
 
 function savePrevCredit(val) {
@@ -7047,16 +7118,16 @@ function pickNumber(str) {
 // ═══════════════════════════════════════════════════
 //  EXPORT / IMPORT
 // ═══════════════════════════════════════════════════
-function exportData() {
+function downloadJson(obj, prefix) {
   try {
-    const json = JSON.stringify(D, null, 2);
+    const json = JSON.stringify(obj, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const today = new Date();
     const dateStr = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
     const a = document.createElement('a');
     a.href = url;
-    a.download = `kakeibo_backup_${dateStr}.json`;
+    a.download = `${prefix}_${dateStr}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -7064,6 +7135,27 @@ function exportData() {
   } catch(e) {
     alert('エクスポートに失敗しました: ' + e.message);
   }
+}
+
+function exportData() { downloadJson(D, 'kakeibo_backup'); }
+
+// 同期の選択で破棄した側のデータ（この端末に一時保存）
+function getDiscardedBackup() {
+  try { return JSON.parse(localStorage.getItem(DISCARDED_KEY) || 'null'); } catch(e) { return null; }
+}
+function exportDiscardedBackup() {
+  const info = getDiscardedBackup();
+  if (!info || !info.data) { alert('一時保存されたデータはありません'); return; }
+  downloadJson(info.data, 'kakeibo_discarded');
+}
+function renderDiscardedBackupArea() {
+  const el = document.getElementById('discarded-backup-area');
+  if (!el) return;
+  const info = getDiscardedBackup();
+  if (!info || !info.data) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="btn btn-s" style="padding:12px; font-size:14px;" onclick="exportDiscardedBackup()">
+    🗂 同期時に破棄したデータをエクスポート<br><span style="font-size:11px;opacity:0.8;">${esc(info.label)}のデータ・${new Date(info.at).toLocaleString('ja-JP')}</span>
+  </button>`;
 }
 
 function importData(event) {
@@ -7083,6 +7175,7 @@ function importData(event) {
         return;
       }
       D = parsed;
+      runMigrations();
       save();
       generateRecurring(curMonth);
       renderSettings();
@@ -7474,10 +7567,7 @@ document.getElementById('rec-anl-modal').addEventListener('click', e => {
 // ═══════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════
-migratePaymentGroups();
-migrateNmAdj();
-initBreakdowns();
-initExpenseCats();
+runMigrations();
 generateRecurring(curMonth);
 generateRecurringTeki3(curMonth);
 generateRecurringIncome(curMonth);
