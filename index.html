@@ -6145,7 +6145,7 @@ function applyRecurringTeki3(recId) {
     subcategory: '',
     payType: r.payType||'',
     budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
-    transferAmt: 0,
+    transferAmt: r.transferAmt||0,
     noCc: !!r.noCc,
     nmType: null, nmAmt: null,
     auto: false
@@ -7298,7 +7298,7 @@ function applyRecurring(recId) {
     subcategory: '',
     payType: r.payType||'',
     budgetAlloc: calcBudgetAlloc(amt, r.payType||''),
-    transferAmt: 0,
+    transferAmt: r.transferAmt||0,
     noCc: !!r.noCc,
     nmType: null, nmAmt: null,
     auto: false
